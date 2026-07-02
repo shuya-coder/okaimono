@@ -7,8 +7,6 @@ window.ShoppingApp.UI = class UI {
     this.shoppingManager = shoppingManager;
     this.historyManager = historyManager;
     this.version = version;
-    this.listSearch = "";
-    this.listCategoryId = "all";
     this.historySearch = "";
     this.historyCategoryId = "all";
     this.historyStartDate = "";
@@ -29,13 +27,11 @@ window.ShoppingApp.UI = class UI {
     this.elements = {
       tabButtons: document.querySelectorAll(".tab-button"),
       tabPanels: document.querySelectorAll(".tab-panel"),
-      quickAddButton: document.querySelector("#quickAddButton"),
-      listSearch: document.querySelector("#listSearch"),
-      listCategoryFilter: document.querySelector("#listCategoryFilter"),
-      listFilterSummary: document.querySelector("#listFilterSummary"),
       shoppingCountSummary: document.querySelector("#shoppingCountSummary"),
       shoppingList: document.querySelector("#shoppingList"),
-      clearCheckedButton: document.querySelector("#clearCheckedButton"),
+      cartCountSummary: document.querySelector("#cartCountSummary"),
+      cartList: document.querySelector("#cartList"),
+      checkoutButton: document.querySelector("#checkoutButton"),
       addItemForm: document.querySelector("#addItemForm"),
       itemName: document.querySelector("#itemName"),
       itemCount: document.querySelector("#itemCount"),
@@ -75,21 +71,11 @@ window.ShoppingApp.UI = class UI {
     this.elements.tabButtons.forEach((button) => {
       button.addEventListener("click", () => this.switchTab(button.dataset.tab));
     });
-    this.elements.quickAddButton.addEventListener("click", () => this.switchTab("add", true));
 
-    this.elements.listSearch.addEventListener("input", (event) => {
-      this.listSearch = event.target.value.trim().toLowerCase();
-      this.renderShoppingList();
-      this.renderListFilterSummary();
-    });
-    this.elements.listCategoryFilter.addEventListener("change", (event) => {
-      this.listCategoryId = event.target.value;
-      this.renderShoppingList();
-      this.renderListFilterSummary();
-    });
-    this.elements.shoppingList.addEventListener("click", (event) => this.handleShoppingAction(event));
-    this.elements.shoppingList.addEventListener("change", (event) => this.handleShoppingCheck(event));
-    this.elements.clearCheckedButton.addEventListener("click", () => this.clearCheckedItems());
+    this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
+    this.elements.shoppingList.addEventListener("change", (event) => this.handleListCheck(event));
+    this.elements.cartList.addEventListener("click", (event) => this.handleCartAction(event));
+    this.elements.checkoutButton.addEventListener("click", () => this.checkoutCart());
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
@@ -132,19 +118,14 @@ window.ShoppingApp.UI = class UI {
     this.elements.resetStorageButton.addEventListener("click", () => this.resetStorage());
   }
 
-  switchTab(tabName, focusFirstField = false) {
+  switchTab(tabName) {
     this.elements.tabButtons.forEach((button) => {
       const isActive = button.dataset.tab === tabName;
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-current", isActive ? "page" : "false");
     });
     this.elements.tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tabName));
-    this.elements.quickAddButton.hidden = tabName === "add";
     window.scrollTo({ top: 0, behavior: "smooth" });
-
-    if (focusFirstField) {
-      window.setTimeout(() => this.elements.itemName.focus(), 180);
-    }
   }
 
   handleAddItem(event) {
@@ -155,11 +136,10 @@ window.ShoppingApp.UI = class UI {
       categoryId: this.elements.itemCategory.value,
     });
 
-    this.historyManager.addRecord(item, "added");
     event.target.reset();
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = this.categoryManager.getFallback().id;
-    this.renderShoppingList();
+    this.renderListAndCart();
     this.renderHistoryList();
     this.elements.itemName.focus();
     this.showToast("商品を追加しました");
@@ -170,52 +150,63 @@ window.ShoppingApp.UI = class UI {
     this.elements.itemCount.value = Math.max(1, currentCount + amount);
   }
 
-  handleShoppingAction(event) {
-    const button = event.target.closest("[data-action]");
-    if (!button) return;
+  handleListAction(event) {
+    const target = event.target.closest("[data-action]");
+    if (!target) return;
 
-    const itemId = Number(button.closest("[data-id]").dataset.id);
-    const action = button.dataset.action;
-
-    if (action === "toggle-check") return;
-
-    if (action === "increase") {
-      this.shoppingManager.changeCount(itemId, 1);
-      this.showToast("個数を増やしました");
+    const action = target.dataset.action;
+    if (action === "move-cart") {
+      const itemId = Number(target.closest("[data-id]")?.dataset.id);
+      const item = this.shoppingManager.moveToCart(itemId);
+      if (item) {
+        this.renderListAndCart();
+        this.showToast("カゴに入れました");
+      }
+      return;
     }
-    if (action === "decrease") {
-      this.shoppingManager.changeCount(itemId, -1);
-      this.showToast("個数を減らしました");
-    }
+
+    const itemId = Number(target.closest("[data-id]")?.dataset.id);
+    if (!itemId) return;
+    if (action === "increase") this.shoppingManager.changeCount(itemId, 1);
+    if (action === "decrease") this.shoppingManager.changeCount(itemId, -1);
     if (action === "edit") this.openEditDialog(itemId);
-    if (action === "delete" && confirm("本当に削除しますか？")) {
-      this.shoppingManager.delete(itemId);
-      this.showToast("削除しました");
-    }
-    this.renderShoppingList();
+    if (action === "delete" && confirm("本当に削除しますか？")) this.shoppingManager.delete(itemId);
+    this.renderListAndCart();
   }
 
-  handleShoppingCheck(event) {
-    const checkbox = event.target.closest("[data-action='toggle-check']");
-    if (!checkbox) return;
-
-    const itemId = Number(checkbox.dataset.id || checkbox.closest("[data-id]").dataset.id);
-    const changedItem = this.shoppingManager.setChecked(itemId, checkbox.checked);
-    if (changedItem?.checked) {
-      this.historyManager.addRecord(changedItem, "purchased");
-      this.showToast("購入済みにしました");
-    } else {
-      this.showToast("未購入に戻しました");
+  handleListCheck(event) {
+    const checkbox = event.target.closest("[data-action='move-cart-check']");
+    if (!checkbox || !checkbox.checked) return;
+    const item = this.shoppingManager.moveToCart(Number(checkbox.dataset.id));
+    if (item) {
+      this.renderListAndCart();
+      this.showToast("カゴに入れました");
     }
-    this.renderShoppingList();
+  }
+
+  handleCartAction(event) {
+    const target = event.target.closest("[data-action]");
+    if (!target) return;
+    const itemId = Number(target.closest("[data-id]")?.dataset.id);
+    if (!itemId) return;
+
+    if (target.dataset.action === "return-list") {
+      this.shoppingManager.moveToList(itemId);
+      this.renderListAndCart();
+      this.showToast("リストに戻しました");
+    }
+  }
+
+  checkoutCart() {
+    const cartItems = this.shoppingManager.getCartItems();
+    if (cartItems.length === 0) return;
+    if (!confirm("カゴの商品を会計済みにしますか？")) return;
+
+    const checkedOutItems = this.shoppingManager.checkoutCart();
+    checkedOutItems.forEach((item) => this.historyManager.addRecord(item, "purchased"));
+    this.renderListAndCart();
     this.renderHistoryList();
-  }
-
-  clearCheckedItems() {
-    if (!confirm("本当に削除しますか？")) return;
-    this.shoppingManager.deleteChecked();
-    this.renderShoppingList();
-    this.showToast("購入済みを削除しました");
+    this.showToast("会計済みにしました");
   }
 
   handleHistoryClick(event) {
@@ -254,26 +245,18 @@ window.ShoppingApp.UI = class UI {
   handleCategoryChange(event) {
     const row = event.target.closest("[data-id]");
     if (!row) return;
-
     const id = Number(row.dataset.id);
-    const nameInput = row.querySelector("[data-field='name']");
-    const colorInput = row.querySelector("[data-field='color']");
     this.categoryManager.update(id, {
-      name: nameInput.value,
-      color: colorInput.value,
+      name: row.querySelector("[data-field='name']").value,
+      color: row.querySelector("[data-field='color']").value,
     });
-    this.renderCategoryOptions();
-    this.renderShoppingList();
-    this.renderHistoryList();
-    this.renderListFilterSummary();
-    this.renderHistoryFilterSummary();
+    this.renderAll();
     this.showToast("カテゴリーを更新しました");
   }
 
   handleCategoryClick(event) {
     const deleteButton = event.target.closest("[data-action='delete-category']");
     if (!deleteButton) return;
-
     const id = Number(deleteButton.closest("[data-id]").dataset.id);
     const categories = this.categoryManager.getAll();
     if (categories.length <= 1) {
@@ -281,7 +264,6 @@ window.ShoppingApp.UI = class UI {
       return;
     }
     if (!confirm("本当に削除しますか？")) return;
-
     const fallback = categories.find((category) => category.id !== id);
     this.categoryManager.delete(id);
     this.shoppingManager.replaceCategory(id, fallback.id);
@@ -293,7 +275,6 @@ window.ShoppingApp.UI = class UI {
   openEditDialog(itemId) {
     const item = this.shoppingManager.getAll().find((current) => current.id === itemId);
     if (!item) return;
-
     this.fillCategorySelect(this.elements.editCategory, this.categoryManager.getAll());
     this.elements.editItemId.value = item.id;
     this.elements.editName.value = item.name;
@@ -310,7 +291,7 @@ window.ShoppingApp.UI = class UI {
       categoryId: this.elements.editCategory.value,
     });
     this.elements.editDialog.close();
-    this.renderShoppingList();
+    this.renderListAndCart();
     this.showToast("保存しました");
   }
 
@@ -329,22 +310,21 @@ window.ShoppingApp.UI = class UI {
 
   renderAll() {
     this.renderCategoryOptions();
-    this.renderShoppingList();
+    this.renderListAndCart();
     this.renderHistoryList();
     this.renderCategories();
-    this.renderListFilterSummary();
     this.renderHistoryFilterSummary();
+  }
+
+  renderListAndCart() {
+    this.renderShoppingList();
+    this.renderCartList();
   }
 
   renderCategoryOptions() {
     const categories = this.categoryManager.getAll();
-    const categoryIds = categories.map((category) => String(category.id));
-    if (this.listCategoryId !== "all" && !categoryIds.includes(this.listCategoryId)) this.listCategoryId = "all";
-    if (this.historyCategoryId !== "all" && !categoryIds.includes(this.historyCategoryId)) this.historyCategoryId = "all";
-
     this.fillCategorySelect(this.elements.itemCategory, categories);
     this.fillCategorySelect(this.elements.editCategory, categories);
-    this.fillFilterSelect(this.elements.listCategoryFilter, categories, this.listCategoryId);
     this.fillFilterSelect(this.elements.historyCategoryFilter, categories, this.historyCategoryId);
   }
 
@@ -363,28 +343,55 @@ window.ShoppingApp.UI = class UI {
   }
 
   renderShoppingList() {
-    const items = this.shoppingManager
-      .getSortedItems()
-      .filter((item) => item.name.toLowerCase().includes(this.listSearch))
-      .filter((item) => this.listCategoryId === "all" || String(item.categoryId) === this.listCategoryId);
-
+    const items = this.shoppingManager.getListItems();
     this.elements.shoppingCountSummary.textContent = `${items.length}件`;
     if (items.length === 0) {
-      this.elements.shoppingList.innerHTML = `<p class="empty-message">表示できる商品はありません。</p>`;
+      this.elements.shoppingList.innerHTML = `<p class="empty-message">リストの商品はありません。</p>`;
       return;
     }
-    this.elements.shoppingList.innerHTML = items.map((item) => this.createShoppingItemHtml(item)).join("");
+    this.elements.shoppingList.innerHTML = items.map((item) => this.createListItemHtml(item)).join("");
   }
 
-  createShoppingItemHtml(item) {
-    const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
-    const checkboxId = `item-check-${item.id}`;
-    return `
-      <article class="shopping-item ${item.checked ? "checked" : ""}" data-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
-        <label class="check-target" for="${checkboxId}">
-          <input id="${checkboxId}" type="checkbox" data-action="toggle-check" data-id="${item.id}" ${item.checked ? "checked" : ""} aria-label="${this.escapeHtml(item.name)}を購入済みにする">
+  renderCartList() {
+    const items = this.shoppingManager.getCartItems();
+    this.elements.cartCountSummary.textContent = `${items.length}件`;
+    this.elements.checkoutButton.disabled = items.length === 0;
+    if (items.length === 0) {
+      this.elements.cartList.innerHTML = `<p class="empty-message">カゴは空です。</p>`;
+      return;
+    }
+    this.elements.cartList.innerHTML = items.map((item) => this.createCartItemHtml(item)).join("");
+  }
+
+  createListItemHtml(item) {
+    return this.createItemHtml(item, {
+      leadingHtml: `
+        <label class="check-target">
+          <input type="checkbox" data-action="move-cart-check" data-id="${item.id}" aria-label="${this.escapeHtml(item.name)}をカゴに入れる">
           <span class="check-box" aria-hidden="true"></span>
         </label>
+      `,
+      actionsHtml: `
+        <button class="small-button move-cart-button" type="button" data-action="move-cart">カゴへ</button>
+        <button class="small-button" type="button" data-action="increase">＋</button>
+        <button class="small-button" type="button" data-action="decrease">−</button>
+        <button class="small-button" type="button" data-action="edit">編集</button>
+      `,
+    });
+  }
+
+  createCartItemHtml(item) {
+    return this.createItemHtml(item, {
+      leadingHtml: `<div class="cart-icon" aria-hidden="true">🧺</div>`,
+      actionsHtml: `<button class="small-button return-list-button" type="button" data-action="return-list">リストに戻す</button>`,
+    });
+  }
+
+  createItemHtml(item, { leadingHtml, actionsHtml }) {
+    const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
+    return `
+      <article class="shopping-item" data-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
+        ${leadingHtml}
         <div class="item-main">
           <p class="item-name">${this.escapeHtml(item.name)} ×${item.count}</p>
           <div class="item-meta">
@@ -392,12 +399,7 @@ window.ShoppingApp.UI = class UI {
             <span>${this.formatDateTime(item.createdAt)}</span>
           </div>
         </div>
-        <div class="item-actions">
-          <button class="small-button" type="button" data-action="increase" aria-label="${this.escapeHtml(item.name)}の個数を増やす">＋</button>
-          <button class="small-button" type="button" data-action="decrease" aria-label="${this.escapeHtml(item.name)}の個数を減らす">−</button>
-          <button class="small-button" type="button" data-action="edit">編集</button>
-          <button class="small-button danger" type="button" data-action="delete">削除</button>
-        </div>
+        <div class="item-actions">${actionsHtml}</div>
       </article>
     `;
   }
@@ -405,16 +407,15 @@ window.ShoppingApp.UI = class UI {
   renderHistoryList() {
     const records = this.historyManager
       .getRecentMonths(3)
+      .filter((record) => record.action === "purchased")
       .filter((record) => record.name.toLowerCase().includes(this.historySearch))
       .filter((record) => this.historyCategoryId === "all" || String(record.categoryId) === this.historyCategoryId)
       .filter((record) => this.isInHistoryDateRange(record.date));
-
     this.elements.historyCountSummary.textContent = `${records.length}件`;
     if (records.length === 0) {
       this.elements.historyList.innerHTML = `<p class="empty-message">条件に合う履歴はありません。</p>`;
       return;
     }
-
     const groups = this.historyManager.groupByDate(records);
     this.elements.historyList.innerHTML = groups.map((group) => this.createHistoryGroupHtml(group)).join("");
   }
@@ -433,9 +434,7 @@ window.ShoppingApp.UI = class UI {
           <h2>${this.formatDateHeader(group.dateKey)}</h2>
           <button class="small-button danger" type="button" data-action="delete-history-day">この日の履歴を削除</button>
         </div>
-        <div class="history-group-items">
-          ${group.items.map((record) => this.createHistoryItemHtml(record)).join("")}
-        </div>
+        <div class="history-group-items">${group.items.map((record) => this.createHistoryItemHtml(record)).join("")}</div>
       </section>
     `;
   }
@@ -476,19 +475,10 @@ window.ShoppingApp.UI = class UI {
       .join("");
   }
 
-  renderListFilterSummary() {
-    const parts = [];
-    if (this.listSearch) parts.push(`検索中: ${this.listSearch}`);
-    if (this.listCategoryId !== "all") parts.push(`カテゴリー: ${this.getCategoryName(this.listCategoryId)}`);
-    this.elements.listFilterSummary.textContent = parts.length > 0 ? parts.join(" / ") : "検索とカテゴリー絞り込み";
-  }
-
   renderHistoryFilterSummary() {
     const parts = [];
     if (this.historySearch) parts.push(`検索中: ${this.historySearch}`);
-    if (this.historyStartDate || this.historyEndDate) {
-      parts.push(`日付: ${this.historyStartDate || "指定なし"}〜${this.historyEndDate || "指定なし"}`);
-    }
+    if (this.historyStartDate || this.historyEndDate) parts.push(`日付: ${this.historyStartDate || "指定なし"}〜${this.historyEndDate || "指定なし"}`);
     if (this.historyCategoryId !== "all") parts.push(`カテゴリー: ${this.getCategoryName(this.historyCategoryId)}`);
     this.elements.historyFilterSummary.textContent =
       parts.length > 0 ? parts.join(" / ") : "商品名・日付・カテゴリーで絞り込み";
@@ -512,42 +502,11 @@ window.ShoppingApp.UI = class UI {
 
   exportCsv() {
     const rows = [
-      ["type", "id", "name", "count", "categoryId", "checked", "date", "color", "action"],
-      ...this.shoppingManager.getAll().map((item) => [
-        "shopping",
-        item.id,
-        item.name,
-        item.count,
-        item.categoryId,
-        item.checked,
-        item.createdAt,
-        "",
-        "",
-      ]),
-      ...this.categoryManager.getAll().map((category) => [
-        "category",
-        category.id,
-        category.name,
-        "",
-        "",
-        "",
-        "",
-        category.color,
-        "",
-      ]),
-      ...this.historyManager.getAll().map((record) => [
-        "history",
-        record.id,
-        record.name,
-        record.count,
-        record.categoryId,
-        "",
-        record.date,
-        "",
-        record.action,
-      ]),
+      ["type", "id", "name", "count", "categoryId", "status", "date", "color", "action"],
+      ...this.shoppingManager.getAll().map((item) => ["shopping", item.id, item.name, item.count, item.categoryId, item.status, item.createdAt, "", ""]),
+      ...this.categoryManager.getAll().map((category) => ["category", category.id, category.name, "", "", "", "", category.color, ""]),
+      ...this.historyManager.getAll().map((record) => ["history", record.id, record.name, record.count, record.categoryId, "", record.date, "", record.action]),
     ];
-
     const csv = rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -562,20 +521,13 @@ window.ShoppingApp.UI = class UI {
   async importCsv(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const text = await file.text();
     const rows = this.parseCsv(text.replace(/^\uFEFF/, ""));
     const [, ...dataRows] = rows;
-    const imported = {
-      shoppingItems: [],
-      categories: [],
-      shoppingHistory: [],
-    };
-
-    dataRows.forEach(([type, id, name, count, categoryId, checked, date, color, action]) => {
+    const imported = { shoppingItems: [], categories: [], shoppingHistory: [] };
+    dataRows.forEach(([type, id, name, count, categoryId, status, date, color, action]) => {
       if (!type || !name) return;
       const numericId = Number(id) || Date.now() + Math.floor(Math.random() * 10000);
-
       if (type === "category") imported.categories.push({ id: numericId, name, color: color || "#607D8B" });
       if (type === "shopping") {
         imported.shoppingItems.push({
@@ -583,7 +535,7 @@ window.ShoppingApp.UI = class UI {
           name,
           count: Math.max(1, Number(count) || 1),
           categoryId: Number(categoryId),
-          checked: checked === "true",
+          status: status === "cart" ? "cart" : "list",
           createdAt: date || new Date().toISOString(),
         });
       }
@@ -598,13 +550,11 @@ window.ShoppingApp.UI = class UI {
         });
       }
     });
-
     if (imported.categories.length === 0) {
       alert("カテゴリーが含まれていないためインポートできません。");
       event.target.value = "";
       return;
     }
-
     this.storage.set("categories", imported.categories);
     this.storage.set("shoppingItems", imported.shoppingItems);
     this.storage.set("shoppingHistory", imported.shoppingHistory);
@@ -625,9 +575,7 @@ window.ShoppingApp.UI = class UI {
     window.clearTimeout(this.toastTimer);
     this.elements.toast.textContent = message;
     this.elements.toast.classList.add("visible");
-    this.toastTimer = window.setTimeout(() => {
-      this.elements.toast.classList.remove("visible");
-    }, 1600);
+    this.toastTimer = window.setTimeout(() => this.elements.toast.classList.remove("visible"), 1600);
   }
 
   parseCsv(text) {
@@ -635,11 +583,9 @@ window.ShoppingApp.UI = class UI {
     let row = [];
     let cell = "";
     let inQuotes = false;
-
     for (let index = 0; index < text.length; index += 1) {
       const char = text[index];
       const nextChar = text[index + 1];
-
       if (char === '"' && inQuotes && nextChar === '"') {
         cell += '"';
         index += 1;
@@ -658,7 +604,6 @@ window.ShoppingApp.UI = class UI {
         cell += char;
       }
     }
-
     if (cell || row.length) {
       row.push(cell);
       rows.push(row);
@@ -682,28 +627,15 @@ window.ShoppingApp.UI = class UI {
   }
 
   formatDateTime(value) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
+    return new Intl.DateTimeFormat("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
   }
 
   formatTime(value) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
+    return new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
   }
 
   formatDateHeader(dateKey) {
     const date = new Date(`${dateKey}T00:00:00`);
-    return new Intl.DateTimeFormat("ja-JP", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      weekday: "short",
-    }).format(date);
+    return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" }).format(date);
   }
 };

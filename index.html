@@ -25,43 +25,11 @@
 
     <main id="mainContent">
       <section class="tab-panel active" data-panel="list" aria-labelledby="listTabButton">
-        <details class="collapsible-card" id="listSearchPanel">
-          <summary>
-            <span>
-              <strong>🔍 商品を探す</strong>
-              <small id="listFilterSummary">検索とカテゴリー絞り込み</small>
-            </span>
-            <span class="chevron" aria-hidden="true">⌄</span>
-          </summary>
-          <div class="filter-body">
-            <label>
-              商品名
-              <input id="listSearch" type="search" placeholder="例: 牛乳" autocomplete="off">
-            </label>
-            <label>
-              カテゴリー
-              <select id="listCategoryFilter"></select>
-            </label>
-          </div>
-        </details>
-
-        <div class="list-status">
-          <span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span>
-        </div>
-
-        <section class="list-section" aria-label="買い物リスト">
-          <div id="shoppingList" class="item-list" aria-live="polite"></div>
-          <button id="clearCheckedButton" class="danger-outline-button" type="button">🧹 購入済みを削除</button>
-        </section>
-      </section>
-
-      <section class="tab-panel" data-panel="add" aria-labelledby="addTabButton">
         <section class="card add-card">
           <div class="section-title">
             <h2>商品追加</h2>
-            <span class="badge">続けて登録できます</span>
+            <span class="badge">リストへ追加</span>
           </div>
-
           <form id="addItemForm" class="form-stack">
             <label>
               商品名
@@ -83,6 +51,24 @@
             </div>
             <button class="primary-button full-width" type="submit">➕ リストに追加</button>
           </form>
+        </section>
+
+        <div class="list-status">
+          <span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span>
+        </div>
+        <section class="list-section" aria-label="買い物リスト">
+          <div id="shoppingList" class="item-list" aria-live="polite"></div>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-panel="cart" aria-labelledby="cartTabButton">
+        <section class="card">
+          <div class="section-title">
+            <h2>カゴ</h2>
+            <span id="cartCountSummary" class="badge" aria-live="polite">0件</span>
+          </div>
+          <div id="cartList" class="item-list" aria-live="polite"></div>
+          <button id="checkoutButton" class="primary-button full-width checkout-button" type="button" disabled>会計済み</button>
         </section>
       </section>
 
@@ -115,7 +101,6 @@
             <button id="resetHistoryFilterButton" class="secondary-button full-width" type="button">リセット</button>
           </div>
         </details>
-
         <div class="list-status">
           <span id="historyCountSummary" class="badge" aria-live="polite">0件</span>
         </div>
@@ -162,11 +147,9 @@
     </main>
   </div>
 
-  <button id="quickAddButton" class="fab" type="button" aria-label="商品追加を開く">➕</button>
-
   <nav class="tab-nav" aria-label="メインメニュー">
     <button id="listTabButton" class="tab-button active" type="button" data-tab="list">🛒<span>リスト</span></button>
-    <button id="addTabButton" class="tab-button" type="button" data-tab="add">➕<span>追加</span></button>
+    <button id="cartTabButton" class="tab-button" type="button" data-tab="cart">🧺<span>カゴ</span></button>
     <button id="historyTabButton" class="tab-button" type="button" data-tab="history">📜<span>履歴</span></button>
     <button id="settingsTabButton" class="tab-button" type="button" data-tab="settings">⚙<span>設定</span></button>
   </nav>

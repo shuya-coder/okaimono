@@ -21,12 +21,16 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
         categories.find((current) => current.name === item.category) ||
         fallback;
 
+      const legacyChecked = item.checked === true || item.checked === "true";
+      const status = item.status === "cart" || (!item.status && legacyChecked) ? "cart" : "list";
+
       return {
-        id: Number(item.id) || Date.now(),
+        id: Number(item.id) || this.createId(),
         name: item.name,
         count: Math.max(1, Number(item.count) || 1),
         categoryId: category.id,
-        checked: item.checked === true || item.checked === "true",
+        status,
+        checked: status === "cart",
         createdAt: item.createdAt || new Date().toISOString(),
       };
     });
@@ -38,8 +42,22 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     this.storage.set(this.storageKey, items);
   }
 
+  getListItems() {
+    return this.getByStatus("list");
+  }
+
+  getCartItems() {
+    return this.getByStatus("cart");
+  }
+
+  getByStatus(status) {
+    return this.getAll()
+      .filter((item) => item.status === status)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
   getSortedItems() {
-    return [...this.getAll()].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return this.getListItems();
   }
 
   add({ name, count, categoryId }) {
@@ -48,23 +66,19 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     if (!trimmedName) return null;
 
     const items = this.getAll();
+    const existingItem = items.find((item) => item.name === trimmedName && item.status === "list");
     const now = new Date().toISOString();
-    const existingItem = items.find((item) => item.name === trimmedName);
 
     if (existingItem) {
-      const updatedItems = items.map((item) =>
-        item.id === existingItem.id
-          ? {
-              ...item,
-              count: item.count + safeCount,
-              categoryId: Number(categoryId),
-              checked: false,
-              createdAt: now,
-            }
-          : item
-      );
-      this.save(updatedItems);
-      return { ...updatedItems.find((item) => item.id === existingItem.id), historyCount: safeCount };
+      const updatedItem = {
+        ...existingItem,
+        count: existingItem.count + safeCount,
+        categoryId: Number(categoryId),
+        createdAt: now,
+      };
+      // 同じミリ秒で複数回追加されても、更新した商品が確実に先頭へ来るよう配列順も更新する。
+      this.save([updatedItem, ...items.filter((item) => item.id !== existingItem.id)]);
+      return { ...updatedItem, historyCount: safeCount };
     }
 
     const item = {
@@ -72,10 +86,11 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
       name: trimmedName,
       count: safeCount,
       categoryId: Number(categoryId),
+      status: "list",
       checked: false,
       createdAt: now,
     };
-    this.save([...items, item]);
+    this.save([item, ...items]);
     return { ...item, historyCount: safeCount };
   }
 
@@ -106,26 +121,33 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     this.save(updatedItems);
   }
 
-  toggleChecked(id) {
-    let changedItem = null;
+  moveToCart(id) {
+    return this.setStatus(id, "cart");
+  }
+
+  moveToList(id) {
+    return this.setStatus(id, "list");
+  }
+
+  setStatus(id, status) {
+    let movedItem = null;
     const updatedItems = this.getAll().map((item) => {
       if (item.id !== id) return item;
-      changedItem = { ...item, checked: !item.checked };
-      return changedItem;
+      movedItem = { ...item, status, checked: status === "cart", createdAt: new Date().toISOString() };
+      return movedItem;
     });
     this.save(updatedItems);
-    return changedItem;
+    return movedItem;
   }
 
   setChecked(id, checked) {
-    let changedItem = null;
-    const updatedItems = this.getAll().map((item) => {
-      if (item.id !== id) return item;
-      changedItem = { ...item, checked: Boolean(checked) };
-      return changedItem;
-    });
-    this.save(updatedItems);
-    return changedItem;
+    return checked ? this.moveToCart(id) : this.moveToList(id);
+  }
+
+  checkoutCart() {
+    const cartItems = this.getCartItems();
+    this.save(this.getAll().filter((item) => item.status !== "cart"));
+    return cartItems;
   }
 
   delete(id) {
