@@ -333,6 +333,34 @@ input[type="color"] {
   gap: 10px;
 }
 
+.history-group {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-group:last-child {
+  border-bottom: 0;
+}
+
+.history-group-header {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 4px 2px 0;
+}
+
+.history-group-header h2 {
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.history-group-items {
+  display: grid;
+  gap: 10px;
+}
+
 .shopping-item,
 .history-item {
   position: relative;
@@ -341,6 +369,10 @@ input[type="color"] {
   gap: 10px;
   padding: 14px 12px 12px 18px;
   overflow: hidden;
+}
+
+.history-item {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .shopping-item::before,
@@ -400,6 +432,12 @@ input[type="color"] {
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 4px;
+}
+
+.history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .small-button {
@@ -594,6 +632,11 @@ dialog::backdrop {
 
   .shopping-item {
     grid-template-columns: 46px minmax(0, 1fr) 300px;
+    align-items: center;
+  }
+
+  .history-group-header {
+    grid-template-columns: 1fr auto;
     align-items: center;
   }
 

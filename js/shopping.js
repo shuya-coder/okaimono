@@ -26,7 +26,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
         name: item.name,
         count: Math.max(1, Number(item.count) || 1),
         categoryId: category.id,
-        checked: Boolean(item.checked),
+        checked: item.checked === true || item.checked === "true",
         createdAt: item.createdAt || new Date().toISOString(),
       };
     });
@@ -107,6 +107,17 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     const updatedItems = this.getAll().map((item) => {
       if (item.id !== id) return item;
       changedItem = { ...item, checked: !item.checked };
+      return changedItem;
+    });
+    this.save(updatedItems);
+    return changedItem;
+  }
+
+  setChecked(id, checked) {
+    let changedItem = null;
+    const updatedItems = this.getAll().map((item) => {
+      if (item.id !== id) return item;
+      changedItem = { ...item, checked: Boolean(checked) };
       return changedItem;
     });
     this.save(updatedItems);

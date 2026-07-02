@@ -59,6 +59,38 @@ window.ShoppingApp.HistoryManager = class HistoryManager {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }
 
+  deleteRecord(id) {
+    this.save(this.getAll().filter((record) => record.id !== id));
+  }
+
+  deleteByDate(dateKey) {
+    this.save(this.getAll().filter((record) => this.getDateKey(record.date) !== dateKey));
+  }
+
+  getDateKey(value) {
+    const date = new Date(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  groupByDate(records) {
+    const groups = new Map();
+    records.forEach((record) => {
+      const dateKey = this.getDateKey(record.date);
+      if (!groups.has(dateKey)) groups.set(dateKey, []);
+      groups.get(dateKey).push(record);
+    });
+
+    return [...groups.entries()]
+      .map(([dateKey, items]) => ({
+        dateKey,
+        items: items.sort((a, b) => new Date(b.date) - new Date(a.date)),
+      }))
+      .sort((a, b) => new Date(b.dateKey) - new Date(a.dateKey));
+  }
+
   getProductSuggestions(keyword) {
     const normalizedKeyword = keyword.trim().toLowerCase();
     if (!normalizedKeyword) return [];

@@ -98,6 +98,7 @@ window.ShoppingApp.UI = class UI {
       this.historyCategoryId = event.target.value;
       this.renderHistoryList();
     });
+    this.elements.historyList.addEventListener("click", (event) => this.handleHistoryClick(event));
 
     this.elements.categoryForm.addEventListener("submit", (event) => this.handleCategorySubmit(event));
     this.elements.categoryList.addEventListener("click", (event) => this.handleCategoryClick(event));
@@ -139,13 +140,14 @@ window.ShoppingApp.UI = class UI {
     this.historyManager.addRecord(item, "added");
     event.target.reset();
     this.elements.itemCount.value = 1;
+    this.elements.itemCategory.value = this.categoryManager.getFallback().id;
     this.elements.pastProductSearch.value = "";
     this.elements.pastProductSuggestions.innerHTML = "";
     this.renderShoppingList();
     this.renderHistoryList();
     this.renderPastProductSuggestions();
-    this.switchTab("list");
-    this.showToast("リストに追加しました");
+    this.elements.itemName.focus();
+    this.showToast("商品を追加しました");
   }
 
   adjustInputCount(amount) {
@@ -164,9 +166,12 @@ window.ShoppingApp.UI = class UI {
       this.shoppingManager.changeCount(itemId, 1);
       this.showToast("個数を増やしました");
     }
-    if (action === "decrease") this.shoppingManager.changeCount(itemId, -1);
+    if (action === "decrease") {
+      this.shoppingManager.changeCount(itemId, -1);
+      this.showToast("個数を減らしました");
+    }
     if (action === "edit") this.openEditDialog(itemId);
-    if (action === "delete" && confirm("この商品を削除しますか？")) {
+    if (action === "delete" && confirm("本当に削除しますか？")) {
       this.shoppingManager.delete(itemId);
       this.showToast("削除しました");
     }
@@ -178,20 +183,43 @@ window.ShoppingApp.UI = class UI {
     if (!checkbox) return;
 
     const itemId = Number(checkbox.closest("[data-id]").dataset.id);
-    const changedItem = this.shoppingManager.toggleChecked(itemId);
+    const changedItem = this.shoppingManager.setChecked(itemId, checkbox.checked);
     if (changedItem?.checked) {
       this.historyManager.addRecord(changedItem, "purchased");
       this.showToast("購入済みにしました");
+    } else {
+      this.showToast("未購入に戻しました");
     }
     this.renderShoppingList();
     this.renderHistoryList();
   }
 
   clearCheckedItems() {
-    if (!confirm("購入済みの商品をすべて削除しますか？")) return;
+    if (!confirm("本当に削除しますか？")) return;
     this.shoppingManager.deleteChecked();
     this.renderShoppingList();
     this.showToast("購入済みを削除しました");
+  }
+
+  handleHistoryClick(event) {
+    const recordDeleteButton = event.target.closest("[data-action='delete-history-record']");
+    if (recordDeleteButton) {
+      const recordId = Number(recordDeleteButton.closest("[data-history-id]").dataset.historyId);
+      if (!confirm("本当に削除しますか？")) return;
+      this.historyManager.deleteRecord(recordId);
+      this.renderHistoryList();
+      this.showToast("履歴を削除しました");
+      return;
+    }
+
+    const dayDeleteButton = event.target.closest("[data-action='delete-history-day']");
+    if (dayDeleteButton) {
+      const dateKey = dayDeleteButton.closest("[data-date-key]").dataset.dateKey;
+      if (!confirm("この日の履歴を本当に削除しますか？")) return;
+      this.historyManager.deleteByDate(dateKey);
+      this.renderHistoryList();
+      this.showToast("この日の履歴を削除しました");
+    }
   }
 
   renderPastProductSuggestions() {
@@ -263,7 +291,7 @@ window.ShoppingApp.UI = class UI {
       alert("カテゴリーは最低1件必要です。");
       return;
     }
-    if (!confirm("カテゴリーを削除しますか？ 関連データは別カテゴリーへ移動します。")) return;
+    if (!confirm("本当に削除しますか？")) return;
 
     const fallback = categories.find((category) => category.id !== id);
     this.categoryManager.delete(id);
@@ -354,7 +382,7 @@ window.ShoppingApp.UI = class UI {
           <p class="item-name">${this.escapeHtml(item.name)} ×${item.count}</p>
           <div class="item-meta">
             <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-            <span>${this.formatDate(item.createdAt)}</span>
+            <span>${this.formatDateTime(item.createdAt)}</span>
           </div>
         </div>
         <div class="item-actions">
@@ -379,24 +407,42 @@ window.ShoppingApp.UI = class UI {
       return;
     }
 
-    this.elements.historyList.innerHTML = records
-      .map((record) => {
-        const category = this.categoryManager.findById(record.categoryId) || this.categoryManager.getFallback();
-        const label = record.action === "purchased" ? "購入" : "追加";
-        return `
-          <article class="history-item" style="--category-color:${this.escapeHtml(category.color)}">
-            <div class="item-main">
-              <p class="item-name">${this.escapeHtml(record.name)} ×${record.count}</p>
-              <div class="item-meta">
-                <span>${label}</span>
-                <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-                <span>${this.formatDate(record.date)}</span>
-              </div>
-            </div>
-          </article>
-        `;
-      })
-      .join("");
+    const groups = this.historyManager.groupByDate(records);
+    this.elements.historyList.innerHTML = groups.map((group) => this.createHistoryGroupHtml(group)).join("");
+  }
+
+  createHistoryGroupHtml(group) {
+    return `
+      <section class="history-group" data-date-key="${group.dateKey}">
+        <div class="history-group-header">
+          <h2>${this.formatDateHeader(group.dateKey)}</h2>
+          <button class="small-button danger" type="button" data-action="delete-history-day">この日の履歴を削除</button>
+        </div>
+        <div class="history-group-items">
+          ${group.items.map((record) => this.createHistoryItemHtml(record)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  createHistoryItemHtml(record) {
+    const category = this.categoryManager.findById(record.categoryId) || this.categoryManager.getFallback();
+    const label = record.action === "purchased" ? "購入" : "追加";
+    return `
+      <article class="history-item" data-history-id="${record.id}" style="--category-color:${this.escapeHtml(category.color)}">
+        <div class="item-main">
+          <p class="item-name">${this.escapeHtml(record.name)} ×${record.count}</p>
+          <div class="item-meta">
+            <span>${label}</span>
+            <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
+            <span>${this.formatTime(record.date)}</span>
+          </div>
+        </div>
+        <div class="history-actions">
+          <button class="small-button danger" type="button" data-action="delete-history-record">削除</button>
+        </div>
+      </article>
+    `;
   }
 
   renderCategories() {
@@ -531,7 +577,7 @@ window.ShoppingApp.UI = class UI {
   }
 
   resetStorage() {
-    if (!confirm("アプリ内の保存データをすべて初期化しますか？")) return;
+    if (!confirm("本当に削除しますか？")) return;
     this.storage.clearAppData();
     this.applyTheme(false);
     this.renderAll();
@@ -598,12 +644,29 @@ window.ShoppingApp.UI = class UI {
       .replaceAll("'", "&#039;");
   }
 
-  formatDate(value) {
+  formatDateTime(value) {
     return new Intl.DateTimeFormat("ja-JP", {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));
+  }
+
+  formatTime(value) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  }
+
+  formatDateHeader(dateKey) {
+    const date = new Date(`${dateKey}T00:00:00`);
+    return new Intl.DateTimeFormat("ja-JP", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    }).format(date);
   }
 };
