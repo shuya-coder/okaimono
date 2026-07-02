@@ -162,6 +162,7 @@ h2 {
 
 .card,
 .toolbar-card,
+.collapsible-card,
 .shopping-item,
 .history-item,
 .category-item {
@@ -185,6 +186,70 @@ h2 {
   z-index: 4;
   padding: 12px;
   margin-bottom: 12px;
+}
+
+.collapsible-card {
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.collapsible-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collapsible-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-card summary strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.collapsible-card summary small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--primary);
+  font-size: 1.15rem;
+  font-weight: 950;
+  transition: transform 0.18s ease;
+}
+
+.collapsible-card[open] .chevron {
+  transform: rotate(180deg);
+}
+
+.filter-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+  animation: filter-open 0.16s ease-out;
+}
+
+.list-status {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 2px 10px;
 }
 
 .section-title {
@@ -264,7 +329,6 @@ input[type="color"] {
 
 .icon-button,
 .small-button,
-.suggestion-chip,
 .stepper button {
   background: var(--surface-soft);
   color: var(--text);
@@ -278,7 +342,6 @@ input[type="color"] {
 .file-button,
 .icon-button,
 .small-button,
-.suggestion-chip,
 .stepper button {
   min-height: 48px;
   border: 1px solid transparent;
@@ -384,12 +447,58 @@ input[type="color"] {
   background: var(--category-color, var(--primary));
 }
 
-.shopping-item input[type="checkbox"] {
+.check-target {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  min-height: 54px;
+  margin: -4px 0 0 -2px;
+  cursor: pointer;
+}
+
+.check-target input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 1px;
+  pointer-events: none;
+}
+
+.check-box {
+  display: grid;
+  place-items: center;
   width: 34px;
   height: 34px;
-  min-height: 34px;
-  margin: 2px 0 0;
-  accent-color: var(--primary);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.check-box::after {
+  content: "✓";
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 950;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.75);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.check-target input:checked + .check-box {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.check-target input:checked + .check-box::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.check-target:active .check-box {
+  transform: scale(0.94);
 }
 
 .shopping-item.checked {
@@ -451,25 +560,6 @@ input[type="color"] {
 
 .history-search {
   margin-bottom: 10px;
-}
-
-.suggestion-list {
-  display: flex;
-  gap: 8px;
-  min-height: 8px;
-  margin-bottom: 12px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scroll-snap-type: x proximity;
-}
-
-.suggestion-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 0 14px;
-  scroll-snap-align: start;
 }
 
 .color-dot {
@@ -593,6 +683,17 @@ dialog::backdrop {
   }
 }
 
+@keyframes filter-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -618,6 +719,11 @@ dialog::backdrop {
 
   .toolbar-card {
     grid-template-columns: minmax(240px, 1fr) 220px auto;
+    align-items: end;
+  }
+
+  .filter-body {
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
     align-items: end;
   }
 

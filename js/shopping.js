@@ -68,7 +68,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     }
 
     const item = {
-      id: Date.now(),
+      id: this.createId(),
       name: trimmedName,
       count: safeCount,
       categoryId: Number(categoryId),
@@ -77,6 +77,10 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     };
     this.save([...items, item]);
     return { ...item, historyCount: safeCount };
+  }
+
+  createId() {
+    return Date.now() + Math.floor(Math.random() * 100000);
   }
 
   update(id, updates) {

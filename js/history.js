@@ -91,21 +91,6 @@ window.ShoppingApp.HistoryManager = class HistoryManager {
       .sort((a, b) => new Date(b.dateKey) - new Date(a.dateKey));
   }
 
-  getProductSuggestions(keyword) {
-    const normalizedKeyword = keyword.trim().toLowerCase();
-    if (!normalizedKeyword) return [];
-
-    const latestByName = new Map();
-    this.getAll()
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .forEach((record) => {
-        if (!record.name.toLowerCase().includes(normalizedKeyword)) return;
-        if (!latestByName.has(record.name)) latestByName.set(record.name, record);
-      });
-
-    return [...latestByName.values()].slice(0, 8);
-  }
-
   replaceCategory(oldCategoryId, newCategoryId) {
     const updatedRecords = this.getAll().map((record) =>
       record.categoryId === oldCategoryId ? { ...record, categoryId: newCategoryId } : record
