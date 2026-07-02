@@ -160,7 +160,7 @@ window.ShoppingApp.UI = class UI {
       const item = this.shoppingManager.moveToCart(itemId);
       if (item) {
         this.renderListAndCart();
-        this.showToast("カゴに入れました");
+        this.showToast("カートに入れました");
       }
       return;
     }
@@ -196,7 +196,7 @@ window.ShoppingApp.UI = class UI {
   checkoutCart() {
     const cartItems = this.shoppingManager.getCartItems();
     if (cartItems.length === 0) return;
-    if (!confirm("カゴの商品を会計済みにしますか？")) return;
+    if (!confirm("カートの商品を会計済みにしますか？")) return;
 
     const checkedOutItems = this.shoppingManager.checkoutCart();
     checkedOutItems.forEach((item) => this.historyManager.addRecord(item, "purchased"));
@@ -353,7 +353,7 @@ window.ShoppingApp.UI = class UI {
     this.elements.cartCountSummary.textContent = `${items.length}件`;
     this.elements.checkoutButton.disabled = items.length === 0;
     if (items.length === 0) {
-      this.elements.cartList.innerHTML = `<p class="empty-message">カゴは空です。</p>`;
+      this.elements.cartList.innerHTML = `<p class="empty-message">カートは空です。</p>`;
       return;
     }
     this.elements.cartList.innerHTML = items.map((item) => this.createCartItemHtml(item)).join("");
@@ -362,25 +362,25 @@ window.ShoppingApp.UI = class UI {
   createListItemHtml(item) {
     return this.createItemHtml(item, {
       leadingHtml: `
-        <div class="cart-icon" aria-hidden="true">🛒</div>
+        <div class="cart-icon" aria-hidden="true">📝</div>
       `,
       actionsHtml: `
-        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カゴへ入れる">🧺</button>
+        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カートへ入れる">カート</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
-        <button class="small-button danger" type="button" data-action="delete" aria-label="削除">🗑</button>
+        <button class="small-button danger" type="button" data-action="delete">削除</button>
       `,
     });
   }
 
   createCartItemHtml(item) {
     return this.createItemHtml(item, {
-      leadingHtml: `<div class="cart-icon" aria-hidden="true">🧺</div>`,
+      leadingHtml: `<div class="cart-icon" aria-hidden="true">🛒</div>`,
       actionsHtml: `
         <button class="small-button return-list-button" type="button" data-action="return-list" aria-label="リストに戻す">戻す</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
-        <button class="small-button danger" type="button" data-action="delete" aria-label="削除">🗑</button>
+        <button class="small-button danger" type="button" data-action="delete">削除</button>
       `,
     });
   }
