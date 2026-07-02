@@ -5,6 +5,8 @@ const DEFAULT_CATEGORIES = [
   { name: "日用品", color: "#2196F3" },
 ];
 
+const LEGACY_DEFAULT_CATEGORY_NAMES = ["飲み物", "野菜", "肉", "パン", "お菓子", "冷凍食品"];
+
 window.ShoppingApp.CategoryManager = class CategoryManager {
   constructor(storage) {
     this.storage = storage;
@@ -26,13 +28,27 @@ window.ShoppingApp.CategoryManager = class CategoryManager {
   }
 
   normalizeCategories(categories) {
-    const normalized = categories.map((category, index) => ({
+    const normalized = categories
+      .filter((category) => !LEGACY_DEFAULT_CATEGORY_NAMES.includes(category.name))
+      .map((category, index) => ({
       id: Number(category.id) || Date.now() + index,
       name: category.name,
       color: category.color || DEFAULT_CATEGORIES[index]?.color || "#607D8B",
     }));
-    this.save(normalized);
-    return normalized;
+
+    const withRequiredDefaults = DEFAULT_CATEGORIES.reduce((currentCategories, defaultCategory, index) => {
+      if (currentCategories.some((category) => category.name === defaultCategory.name)) return currentCategories;
+      return [
+        ...currentCategories,
+        {
+          id: Date.now() + index,
+          ...defaultCategory,
+        },
+      ];
+    }, normalized);
+
+    this.save(withRequiredDefaults);
+    return withRequiredDefaults;
   }
 
   save(categories) {

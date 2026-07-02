@@ -25,12 +25,15 @@
 
     <main id="mainContent">
       <section class="tab-panel active" data-panel="list" aria-labelledby="listTabButton">
-        <section class="card add-card">
-          <div class="section-title">
-            <h2>商品追加</h2>
-            <span class="badge">リストへ追加</span>
-          </div>
-          <form id="addItemForm" class="form-stack">
+        <details class="collapsible-card add-card" id="addItemPanel">
+          <summary>
+            <span>
+              <strong>＋ 商品を追加</strong>
+              <small>商品名・個数・カテゴリーを入力</small>
+            </span>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </summary>
+          <form id="addItemForm" class="form-stack add-form-body">
             <label>
               商品名
               <input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required>
@@ -51,7 +54,7 @@
             </div>
             <button class="primary-button full-width" type="submit">➕ リストに追加</button>
           </form>
-        </section>
+        </details>
 
         <div class="list-status">
           <span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span>

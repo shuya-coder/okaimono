@@ -73,7 +73,6 @@ window.ShoppingApp.UI = class UI {
     });
 
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
-    this.elements.shoppingList.addEventListener("change", (event) => this.handleListCheck(event));
     this.elements.cartList.addEventListener("click", (event) => this.handleCartAction(event));
     this.elements.checkoutButton.addEventListener("click", () => this.checkoutCart());
 
@@ -130,18 +129,19 @@ window.ShoppingApp.UI = class UI {
 
   handleAddItem(event) {
     event.preventDefault();
+    const selectedCategoryId = this.elements.itemCategory.value;
     const item = this.shoppingManager.add({
       name: this.elements.itemName.value,
       count: this.elements.itemCount.value,
-      categoryId: this.elements.itemCategory.value,
+      categoryId: selectedCategoryId,
     });
+    if (!item) return;
 
-    event.target.reset();
+    this.elements.itemName.value = "";
     this.elements.itemCount.value = 1;
-    this.elements.itemCategory.value = this.categoryManager.getFallback().id;
+    this.elements.itemCategory.value = selectedCategoryId;
     this.renderListAndCart();
-    this.renderHistoryList();
-    this.elements.itemName.focus();
+    requestAnimationFrame(() => this.elements.itemName.focus({ preventScroll: true }));
     this.showToast("商品を追加しました");
   }
 
@@ -174,16 +174,6 @@ window.ShoppingApp.UI = class UI {
     this.renderListAndCart();
   }
 
-  handleListCheck(event) {
-    const checkbox = event.target.closest("[data-action='move-cart-check']");
-    if (!checkbox || !checkbox.checked) return;
-    const item = this.shoppingManager.moveToCart(Number(checkbox.dataset.id));
-    if (item) {
-      this.renderListAndCart();
-      this.showToast("カゴに入れました");
-    }
-  }
-
   handleCartAction(event) {
     const target = event.target.closest("[data-action]");
     if (!target) return;
@@ -194,7 +184,13 @@ window.ShoppingApp.UI = class UI {
       this.shoppingManager.moveToList(itemId);
       this.renderListAndCart();
       this.showToast("リストに戻しました");
+      return;
     }
+
+    if (target.dataset.action === "increase") this.shoppingManager.changeCount(itemId, 1);
+    if (target.dataset.action === "decrease") this.shoppingManager.changeCount(itemId, -1);
+    if (target.dataset.action === "delete" && confirm("本当に削除しますか？")) this.shoppingManager.delete(itemId);
+    this.renderListAndCart();
   }
 
   checkoutCart() {
@@ -366,16 +362,13 @@ window.ShoppingApp.UI = class UI {
   createListItemHtml(item) {
     return this.createItemHtml(item, {
       leadingHtml: `
-        <label class="check-target">
-          <input type="checkbox" data-action="move-cart-check" data-id="${item.id}" aria-label="${this.escapeHtml(item.name)}をカゴに入れる">
-          <span class="check-box" aria-hidden="true"></span>
-        </label>
+        <div class="cart-icon" aria-hidden="true">🛒</div>
       `,
       actionsHtml: `
-        <button class="small-button move-cart-button" type="button" data-action="move-cart">カゴへ</button>
+        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カゴへ入れる">🧺</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
-        <button class="small-button" type="button" data-action="edit">編集</button>
+        <button class="small-button danger" type="button" data-action="delete" aria-label="削除">🗑</button>
       `,
     });
   }
@@ -383,7 +376,12 @@ window.ShoppingApp.UI = class UI {
   createCartItemHtml(item) {
     return this.createItemHtml(item, {
       leadingHtml: `<div class="cart-icon" aria-hidden="true">🧺</div>`,
-      actionsHtml: `<button class="small-button return-list-button" type="button" data-action="return-list">リストに戻す</button>`,
+      actionsHtml: `
+        <button class="small-button return-list-button" type="button" data-action="return-list" aria-label="リストに戻す">戻す</button>
+        <button class="small-button" type="button" data-action="increase">＋</button>
+        <button class="small-button" type="button" data-action="decrease">−</button>
+        <button class="small-button danger" type="button" data-action="delete" aria-label="削除">🗑</button>
+      `,
     });
   }
 

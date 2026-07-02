@@ -246,6 +246,11 @@ h2 {
   animation: filter-open 0.16s ease-out;
 }
 
+.add-form-body {
+  padding: 0 14px 14px;
+  animation: filter-open 0.16s ease-out;
+}
+
 .list-status {
   display: flex;
   justify-content: flex-end;
@@ -444,9 +449,9 @@ input[type="color"] {
 .history-item {
   position: relative;
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
-  gap: 10px;
-  padding: 14px 12px 12px 18px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 10px 10px 14px;
   overflow: hidden;
 }
 
@@ -524,9 +529,9 @@ input[type="color"] {
 .cart-icon {
   display: grid;
   place-items: center;
-  width: 46px;
-  min-height: 54px;
-  font-size: 1.45rem;
+  width: 34px;
+  min-height: 42px;
+  font-size: 1.28rem;
 }
 
 .shopping-item.checked {
@@ -542,19 +547,19 @@ input[type="color"] {
 }
 
 .item-name {
-  margin: 0 0 5px;
-  font-size: 1.1rem;
+  margin: 0 0 3px;
+  font-size: 1.04rem;
   font-weight: 950;
-  line-height: 1.3;
+  line-height: 1.22;
   overflow-wrap: anywhere;
 }
 
 .item-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px 10px;
+  gap: 4px 8px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 .item-meta span {
@@ -567,25 +572,23 @@ input[type="color"] {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .move-cart-button,
 .return-list-button {
-  min-height: 52px;
+  min-height: 44px;
   font-size: 1rem;
 }
 
 .move-cart-button {
-  grid-column: span 2;
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
 }
 
 .return-list-button {
-  grid-column: 1 / -1;
   background: var(--surface-soft);
   color: var(--primary);
   border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
@@ -599,7 +602,10 @@ input[type="color"] {
 
 .small-button {
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 6px;
+  min-height: 44px;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 .small-button.danger {
@@ -785,7 +791,7 @@ dialog::backdrop {
   }
 
   .shopping-item {
-    grid-template-columns: 46px minmax(0, 1fr) 300px;
+    grid-template-columns: 34px minmax(0, 1fr) 340px;
     align-items: center;
   }
 
