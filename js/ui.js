@@ -177,6 +177,8 @@ window.ShoppingApp.UI = class UI {
     const itemId = Number(button.closest("[data-id]").dataset.id);
     const action = button.dataset.action;
 
+    if (action === "toggle-check") return;
+
     if (action === "increase") {
       this.shoppingManager.changeCount(itemId, 1);
       this.showToast("個数を増やしました");
@@ -197,7 +199,7 @@ window.ShoppingApp.UI = class UI {
     const checkbox = event.target.closest("[data-action='toggle-check']");
     if (!checkbox) return;
 
-    const itemId = Number(checkbox.closest("[data-id]").dataset.id);
+    const itemId = Number(checkbox.dataset.id || checkbox.closest("[data-id]").dataset.id);
     const changedItem = this.shoppingManager.setChecked(itemId, checkbox.checked);
     if (changedItem?.checked) {
       this.historyManager.addRecord(changedItem, "purchased");
@@ -380,7 +382,7 @@ window.ShoppingApp.UI = class UI {
     return `
       <article class="shopping-item ${item.checked ? "checked" : ""}" data-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
         <label class="check-target" for="${checkboxId}">
-          <input id="${checkboxId}" type="checkbox" data-action="toggle-check" ${item.checked ? "checked" : ""} aria-label="${this.escapeHtml(item.name)}を購入済みにする">
+          <input id="${checkboxId}" type="checkbox" data-action="toggle-check" data-id="${item.id}" ${item.checked ? "checked" : ""} aria-label="${this.escapeHtml(item.name)}を購入済みにする">
           <span class="check-box" aria-hidden="true"></span>
         </label>
         <div class="item-main">

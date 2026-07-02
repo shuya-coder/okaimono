@@ -1,4 +1,4 @@
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 
 document.addEventListener("DOMContentLoaded", () => {
   const { Storage, CategoryManager, ShoppingManager, HistoryManager, UI } = window.ShoppingApp;
