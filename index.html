@@ -25,17 +25,29 @@
 
     <main id="mainContent">
       <section class="tab-panel active" data-panel="list" aria-labelledby="listTabButton">
-        <section class="toolbar-card" aria-label="買い物リストの絞り込み">
-          <label>
-            商品を探す
-            <input id="listSearch" type="search" placeholder="例: 牛乳" autocomplete="off">
-          </label>
-          <label>
-            カテゴリー
-            <select id="listCategoryFilter"></select>
-          </label>
+        <details class="collapsible-card" id="listSearchPanel">
+          <summary>
+            <span>
+              <strong>商品を探す</strong>
+              <small id="listFilterSummary">検索とカテゴリー絞り込み</small>
+            </span>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </summary>
+          <div class="filter-body">
+            <label>
+              商品名
+              <input id="listSearch" type="search" placeholder="例: 牛乳" autocomplete="off">
+            </label>
+            <label>
+              カテゴリー
+              <select id="listCategoryFilter"></select>
+            </label>
+          </div>
+        </details>
+
+        <div class="list-status">
           <span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span>
-        </section>
+        </div>
 
         <section class="list-section" aria-label="買い物リスト">
           <div id="shoppingList" class="item-list" aria-live="polite"></div>
@@ -47,14 +59,8 @@
         <section class="card add-card">
           <div class="section-title">
             <h2>商品追加</h2>
-            <span class="badge">同じ商品は個数を追加</span>
+            <span class="badge">続けて登録できます</span>
           </div>
-
-          <label class="history-search">
-            過去の商品を検索
-            <input id="pastProductSearch" type="search" placeholder="例: 牛" autocomplete="off">
-          </label>
-          <div id="pastProductSuggestions" class="suggestion-list" aria-live="polite"></div>
 
           <form id="addItemForm" class="form-stack">
             <label>
@@ -81,17 +87,38 @@
       </section>
 
       <section class="tab-panel" data-panel="history" aria-labelledby="historyTabButton">
-        <section class="toolbar-card" aria-label="履歴の絞り込み">
-          <label>
-            履歴を探す
-            <input id="historySearch" type="search" placeholder="商品名で検索" autocomplete="off">
-          </label>
-          <label>
-            カテゴリー
-            <select id="historyCategoryFilter"></select>
-          </label>
+        <details class="collapsible-card" id="historySearchPanel">
+          <summary>
+            <span>
+              <strong>履歴を検索</strong>
+              <small id="historyFilterSummary">商品名・日付・カテゴリーで絞り込み</small>
+            </span>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </summary>
+          <div class="filter-body">
+            <label>
+              商品名
+              <input id="historySearch" type="search" placeholder="商品名で検索" autocomplete="off">
+            </label>
+            <label>
+              開始日
+              <input id="historyStartDate" type="date">
+            </label>
+            <label>
+              終了日
+              <input id="historyEndDate" type="date">
+            </label>
+            <label>
+              カテゴリー
+              <select id="historyCategoryFilter"></select>
+            </label>
+            <button id="resetHistoryFilterButton" class="secondary-button full-width" type="button">リセット</button>
+          </div>
+        </details>
+
+        <div class="list-status">
           <span id="historyCountSummary" class="badge" aria-live="polite">0件</span>
-        </section>
+        </div>
         <div id="historyList" class="item-list" aria-live="polite"></div>
       </section>
 

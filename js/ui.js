@@ -11,6 +11,8 @@ window.ShoppingApp.UI = class UI {
     this.listCategoryId = "all";
     this.historySearch = "";
     this.historyCategoryId = "all";
+    this.historyStartDate = "";
+    this.historyEndDate = "";
     this.toastTimer = null;
     this.elements = {};
   }
@@ -30,11 +32,10 @@ window.ShoppingApp.UI = class UI {
       quickAddButton: document.querySelector("#quickAddButton"),
       listSearch: document.querySelector("#listSearch"),
       listCategoryFilter: document.querySelector("#listCategoryFilter"),
+      listFilterSummary: document.querySelector("#listFilterSummary"),
       shoppingCountSummary: document.querySelector("#shoppingCountSummary"),
       shoppingList: document.querySelector("#shoppingList"),
       clearCheckedButton: document.querySelector("#clearCheckedButton"),
-      pastProductSearch: document.querySelector("#pastProductSearch"),
-      pastProductSuggestions: document.querySelector("#pastProductSuggestions"),
       addItemForm: document.querySelector("#addItemForm"),
       itemName: document.querySelector("#itemName"),
       itemCount: document.querySelector("#itemCount"),
@@ -42,7 +43,11 @@ window.ShoppingApp.UI = class UI {
       decreaseCount: document.querySelector("#decreaseCount"),
       increaseCount: document.querySelector("#increaseCount"),
       historySearch: document.querySelector("#historySearch"),
+      historyStartDate: document.querySelector("#historyStartDate"),
+      historyEndDate: document.querySelector("#historyEndDate"),
       historyCategoryFilter: document.querySelector("#historyCategoryFilter"),
+      historyFilterSummary: document.querySelector("#historyFilterSummary"),
+      resetHistoryFilterButton: document.querySelector("#resetHistoryFilterButton"),
       historyCountSummary: document.querySelector("#historyCountSummary"),
       historyList: document.querySelector("#historyList"),
       categoryForm: document.querySelector("#categoryForm"),
@@ -75,17 +80,17 @@ window.ShoppingApp.UI = class UI {
     this.elements.listSearch.addEventListener("input", (event) => {
       this.listSearch = event.target.value.trim().toLowerCase();
       this.renderShoppingList();
+      this.renderListFilterSummary();
     });
     this.elements.listCategoryFilter.addEventListener("change", (event) => {
       this.listCategoryId = event.target.value;
       this.renderShoppingList();
+      this.renderListFilterSummary();
     });
     this.elements.shoppingList.addEventListener("click", (event) => this.handleShoppingAction(event));
     this.elements.shoppingList.addEventListener("change", (event) => this.handleShoppingCheck(event));
     this.elements.clearCheckedButton.addEventListener("click", () => this.clearCheckedItems());
 
-    this.elements.pastProductSearch.addEventListener("input", () => this.renderPastProductSuggestions());
-    this.elements.pastProductSuggestions.addEventListener("click", (event) => this.handleSuggestionClick(event));
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
     this.elements.increaseCount.addEventListener("click", () => this.adjustInputCount(1));
@@ -93,11 +98,24 @@ window.ShoppingApp.UI = class UI {
     this.elements.historySearch.addEventListener("input", (event) => {
       this.historySearch = event.target.value.trim().toLowerCase();
       this.renderHistoryList();
+      this.renderHistoryFilterSummary();
+    });
+    this.elements.historyStartDate.addEventListener("change", (event) => {
+      this.historyStartDate = event.target.value;
+      this.renderHistoryList();
+      this.renderHistoryFilterSummary();
+    });
+    this.elements.historyEndDate.addEventListener("change", (event) => {
+      this.historyEndDate = event.target.value;
+      this.renderHistoryList();
+      this.renderHistoryFilterSummary();
     });
     this.elements.historyCategoryFilter.addEventListener("change", (event) => {
       this.historyCategoryId = event.target.value;
       this.renderHistoryList();
+      this.renderHistoryFilterSummary();
     });
+    this.elements.resetHistoryFilterButton.addEventListener("click", () => this.resetHistoryFilters());
     this.elements.historyList.addEventListener("click", (event) => this.handleHistoryClick(event));
 
     this.elements.categoryForm.addEventListener("submit", (event) => this.handleCategorySubmit(event));
@@ -141,11 +159,8 @@ window.ShoppingApp.UI = class UI {
     event.target.reset();
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = this.categoryManager.getFallback().id;
-    this.elements.pastProductSearch.value = "";
-    this.elements.pastProductSuggestions.innerHTML = "";
     this.renderShoppingList();
     this.renderHistoryList();
-    this.renderPastProductSuggestions();
     this.elements.itemName.focus();
     this.showToast("商品を追加しました");
   }
@@ -222,36 +237,6 @@ window.ShoppingApp.UI = class UI {
     }
   }
 
-  renderPastProductSuggestions() {
-    const suggestions = this.historyManager.getProductSuggestions(this.elements.pastProductSearch.value);
-    if (suggestions.length === 0) {
-      this.elements.pastProductSuggestions.innerHTML = "";
-      return;
-    }
-
-    this.elements.pastProductSuggestions.innerHTML = suggestions
-      .map((record) => {
-        const category = this.categoryManager.findById(record.categoryId);
-        return `
-          <button class="suggestion-chip" type="button" data-name="${this.escapeHtml(record.name)}" data-category-id="${record.categoryId}">
-            <span class="color-dot" style="background:${this.escapeHtml(category?.color || "#607D8B")}"></span>
-            ${this.escapeHtml(record.name)}
-          </button>
-        `;
-      })
-      .join("");
-  }
-
-  handleSuggestionClick(event) {
-    const button = event.target.closest(".suggestion-chip");
-    if (!button) return;
-    this.elements.itemName.value = button.dataset.name;
-    this.elements.itemCategory.value = button.dataset.categoryId;
-    this.elements.pastProductSearch.value = button.dataset.name;
-    this.elements.pastProductSuggestions.innerHTML = "";
-    this.elements.itemCount.focus();
-  }
-
   handleCategorySubmit(event) {
     event.preventDefault();
     this.categoryManager.add({
@@ -278,6 +263,8 @@ window.ShoppingApp.UI = class UI {
     this.renderCategoryOptions();
     this.renderShoppingList();
     this.renderHistoryList();
+    this.renderListFilterSummary();
+    this.renderHistoryFilterSummary();
     this.showToast("カテゴリーを更新しました");
   }
 
@@ -325,12 +312,26 @@ window.ShoppingApp.UI = class UI {
     this.showToast("保存しました");
   }
 
+  resetHistoryFilters() {
+    this.historySearch = "";
+    this.historyStartDate = "";
+    this.historyEndDate = "";
+    this.historyCategoryId = "all";
+    this.elements.historySearch.value = "";
+    this.elements.historyStartDate.value = "";
+    this.elements.historyEndDate.value = "";
+    this.elements.historyCategoryFilter.value = "all";
+    this.renderHistoryList();
+    this.renderHistoryFilterSummary();
+  }
+
   renderAll() {
     this.renderCategoryOptions();
     this.renderShoppingList();
-    this.renderPastProductSuggestions();
     this.renderHistoryList();
     this.renderCategories();
+    this.renderListFilterSummary();
+    this.renderHistoryFilterSummary();
   }
 
   renderCategoryOptions() {
@@ -375,9 +376,13 @@ window.ShoppingApp.UI = class UI {
 
   createShoppingItemHtml(item) {
     const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
+    const checkboxId = `item-check-${item.id}`;
     return `
       <article class="shopping-item ${item.checked ? "checked" : ""}" data-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
-        <input type="checkbox" data-action="toggle-check" ${item.checked ? "checked" : ""} aria-label="${this.escapeHtml(item.name)}を購入済みにする">
+        <label class="check-target" for="${checkboxId}">
+          <input id="${checkboxId}" type="checkbox" data-action="toggle-check" ${item.checked ? "checked" : ""} aria-label="${this.escapeHtml(item.name)}を購入済みにする">
+          <span class="check-box" aria-hidden="true"></span>
+        </label>
         <div class="item-main">
           <p class="item-name">${this.escapeHtml(item.name)} ×${item.count}</p>
           <div class="item-meta">
@@ -399,16 +404,24 @@ window.ShoppingApp.UI = class UI {
     const records = this.historyManager
       .getRecentMonths(3)
       .filter((record) => record.name.toLowerCase().includes(this.historySearch))
-      .filter((record) => this.historyCategoryId === "all" || String(record.categoryId) === this.historyCategoryId);
+      .filter((record) => this.historyCategoryId === "all" || String(record.categoryId) === this.historyCategoryId)
+      .filter((record) => this.isInHistoryDateRange(record.date));
 
     this.elements.historyCountSummary.textContent = `${records.length}件`;
     if (records.length === 0) {
-      this.elements.historyList.innerHTML = `<p class="empty-message">過去3か月の履歴はありません。</p>`;
+      this.elements.historyList.innerHTML = `<p class="empty-message">条件に合う履歴はありません。</p>`;
       return;
     }
 
     const groups = this.historyManager.groupByDate(records);
     this.elements.historyList.innerHTML = groups.map((group) => this.createHistoryGroupHtml(group)).join("");
+  }
+
+  isInHistoryDateRange(value) {
+    const dateKey = this.historyManager.getDateKey(value);
+    if (this.historyStartDate && dateKey < this.historyStartDate) return false;
+    if (this.historyEndDate && dateKey > this.historyEndDate) return false;
+    return true;
   }
 
   createHistoryGroupHtml(group) {
@@ -459,6 +472,28 @@ window.ShoppingApp.UI = class UI {
         `
       )
       .join("");
+  }
+
+  renderListFilterSummary() {
+    const parts = [];
+    if (this.listSearch) parts.push(`検索中: ${this.listSearch}`);
+    if (this.listCategoryId !== "all") parts.push(`カテゴリー: ${this.getCategoryName(this.listCategoryId)}`);
+    this.elements.listFilterSummary.textContent = parts.length > 0 ? parts.join(" / ") : "検索とカテゴリー絞り込み";
+  }
+
+  renderHistoryFilterSummary() {
+    const parts = [];
+    if (this.historySearch) parts.push(`検索中: ${this.historySearch}`);
+    if (this.historyStartDate || this.historyEndDate) {
+      parts.push(`日付: ${this.historyStartDate || "指定なし"}〜${this.historyEndDate || "指定なし"}`);
+    }
+    if (this.historyCategoryId !== "all") parts.push(`カテゴリー: ${this.getCategoryName(this.historyCategoryId)}`);
+    this.elements.historyFilterSummary.textContent =
+      parts.length > 0 ? parts.join(" / ") : "商品名・日付・カテゴリーで絞り込み";
+  }
+
+  getCategoryName(categoryId) {
+    return this.categoryManager.findById(Number(categoryId))?.name ?? "不明";
   }
 
   toggleDarkMode() {
