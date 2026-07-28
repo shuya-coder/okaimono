@@ -5,6 +5,19 @@ HTML、CSS、Vanilla JavaScriptだけで動く、スマホ向けの買い物リ�
 
 データはブラウザのLocalStorageに保存されます。アプリ本体はフォルダをコピーするだけで別PCへ移せますが、買い物データはCSVでバックアップして移行します。
 
+
+## すぐ使うURL
+
+アプリをブラウザで直接開くURL:
+
+https://shuya-coder.github.io/okaimono/
+
+GitHubリポジトリURL:
+
+https://github.com/shuya-coder/okaimono
+
+上のアプリURLが404になる場合は、GitHub Pagesがまだ有効になっていません。GitHubのリポジトリ画面で `Settings` → `Pages` を開き、`Branch` を `main`、フォルダを `/root` にして保存してください。数分後に上のURLで開けるようになります。
+
 ## まず読むところ
 
 別のパソコンですぐ使いたい場合は、次の順番で進めてください。
@@ -485,3 +498,4 @@ VSCodeで開く場合は、右下の文字コードが `UTF-8` になってい�
 - グローバル変数は `window.ShoppingApp` 名前空間にまとめています。
 - 外部APIやクラウド同期は使用していません。
 - 今後、ログイン、共有、クラウド同期、通知、店舗別リストなどを追加しやすいよう、管理クラスを分けています。
+
