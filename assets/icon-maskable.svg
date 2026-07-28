@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="買い物リスト">
+  <rect width="512" height="512" fill="#1d74d8"/>
+  <circle cx="256" cy="256" r="210" fill="#176fc9"/>
+  <path d="M150 184h226l-24 150H178l-28-150Z" fill="#ffffff"/>
+  <path d="M178 184c6-48 36-78 78-78s72 30 78 78" fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="206" cy="374" r="24" fill="#ffffff"/>
+  <circle cx="328" cy="374" r="24" fill="#ffffff"/>
+  <path d="M212 252h88M212 302h62" stroke="#1d74d8" stroke-width="28" stroke-linecap="round"/>
+</svg>
