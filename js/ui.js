@@ -34,6 +34,7 @@ window.ShoppingApp.UI = class UI {
       checkoutButton: document.querySelector("#checkoutButton"),
       addItemForm: document.querySelector("#addItemForm"),
       itemName: document.querySelector("#itemName"),
+      pastItemList: document.querySelector("#pastItemList"),
       itemCount: document.querySelector("#itemCount"),
       itemCategory: document.querySelector("#itemCategory"),
       decreaseCount: document.querySelector("#decreaseCount"),
@@ -77,6 +78,7 @@ window.ShoppingApp.UI = class UI {
     this.elements.checkoutButton.addEventListener("click", () => this.checkoutCart());
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
+    this.elements.pastItemList.addEventListener("click", (event) => this.handlePastItemClick(event));
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
     this.elements.increaseCount.addEventListener("click", () => this.adjustInputCount(1));
 
@@ -137,12 +139,31 @@ window.ShoppingApp.UI = class UI {
     });
     if (!item) return;
 
+    this.historyManager.addRecord(item, "added");
+
     this.elements.itemName.value = "";
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = selectedCategoryId;
     this.renderListAndCart();
+    this.renderPastItems();
     requestAnimationFrame(() => this.elements.itemName.focus({ preventScroll: true }));
     this.showToast("商品を追加しました");
+  }
+
+  handlePastItemClick(event) {
+    const button = event.target.closest("[data-past-item]");
+    if (!button) return;
+
+    const name = button.dataset.name;
+    const count = Number(button.dataset.count) || 1;
+    const categoryId = button.dataset.categoryId;
+    this.elements.itemName.value = name;
+    this.elements.itemCount.value = count;
+    if ([...this.elements.itemCategory.options].some((option) => option.value === categoryId)) {
+      this.elements.itemCategory.value = categoryId;
+    }
+    this.elements.itemName.focus({ preventScroll: true });
+    this.showToast(`${name}を入力しました`);
   }
 
   adjustInputCount(amount) {
@@ -306,10 +327,43 @@ window.ShoppingApp.UI = class UI {
 
   renderAll() {
     this.renderCategoryOptions();
+    this.renderPastItems();
     this.renderListAndCart();
     this.renderHistoryList();
     this.renderCategories();
     this.renderHistoryFilterSummary();
+  }
+
+  renderPastItems() {
+    const candidates = [
+      ...this.shoppingManager.getAll().map((item) => ({ ...item, date: item.createdAt })),
+      ...this.historyManager.getAll(),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const seenNames = new Set();
+    const items = candidates.filter((item) => {
+      const key = item.name.trim().toLocaleLowerCase("ja-JP");
+      if (!key || seenNames.has(key)) return false;
+      seenNames.add(key);
+      return true;
+    });
+
+    if (items.length === 0) {
+      this.elements.pastItemList.innerHTML = `<p class="past-items-empty">まだ追加履歴はありません。</p>`;
+      return;
+    }
+
+    this.elements.pastItemList.innerHTML = items
+      .map((item) => {
+        const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
+        return `
+          <button class="past-item-button" type="button" data-past-item data-name="${this.escapeHtml(item.name)}"
+            data-count="${item.count}" data-category-id="${item.categoryId}">
+            <span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>
+            <span>${this.escapeHtml(item.name)}</span>
+          </button>
+        `;
+      })
+      .join("");
   }
 
   renderListAndCart() {
