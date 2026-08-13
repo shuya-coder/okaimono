@@ -1,16 +1,14 @@
 window.ShoppingApp = window.ShoppingApp || {};
 
 window.ShoppingApp.UI = class UI {
-  constructor({ storage, categoryManager, shoppingManager, historyManager, version }) {
+  constructor({ storage, categoryManager, shoppingManager, purchasedManager, version }) {
     this.storage = storage;
     this.categoryManager = categoryManager;
     this.shoppingManager = shoppingManager;
-    this.historyManager = historyManager;
+    this.purchasedManager = purchasedManager;
     this.version = version;
-    this.historySearch = "";
-    this.historyCategoryId = "all";
-    this.historyStartDate = "";
-    this.historyEndDate = "";
+    this.purchasedSearch = "";
+    this.purchasedCategoryId = "all";
     this.toastTimer = null;
     this.elements = {};
   }
@@ -38,14 +36,10 @@ window.ShoppingApp.UI = class UI {
       itemCategory: document.querySelector("#itemCategory"),
       decreaseCount: document.querySelector("#decreaseCount"),
       increaseCount: document.querySelector("#increaseCount"),
-      historySearch: document.querySelector("#historySearch"),
-      historyStartDate: document.querySelector("#historyStartDate"),
-      historyEndDate: document.querySelector("#historyEndDate"),
-      historyCategoryFilter: document.querySelector("#historyCategoryFilter"),
-      historyFilterSummary: document.querySelector("#historyFilterSummary"),
-      resetHistoryFilterButton: document.querySelector("#resetHistoryFilterButton"),
-      historyCountSummary: document.querySelector("#historyCountSummary"),
-      historyList: document.querySelector("#historyList"),
+      purchasedSearch: document.querySelector("#purchasedSearch"),
+      purchasedCategoryFilter: document.querySelector("#purchasedCategoryFilter"),
+      purchasedCountSummary: document.querySelector("#purchasedCountSummary"),
+      purchasedList: document.querySelector("#purchasedList"),
       categoryForm: document.querySelector("#categoryForm"),
       categoryName: document.querySelector("#categoryName"),
       categoryColor: document.querySelector("#categoryColor"),
@@ -80,28 +74,15 @@ window.ShoppingApp.UI = class UI {
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
     this.elements.increaseCount.addEventListener("click", () => this.adjustInputCount(1));
 
-    this.elements.historySearch.addEventListener("input", (event) => {
-      this.historySearch = event.target.value.trim().toLowerCase();
-      this.renderHistoryList();
-      this.renderHistoryFilterSummary();
+    this.elements.purchasedSearch.addEventListener("input", (event) => {
+      this.purchasedSearch = event.target.value.trim().toLocaleLowerCase("ja-JP");
+      this.renderPurchasedList();
     });
-    this.elements.historyStartDate.addEventListener("change", (event) => {
-      this.historyStartDate = event.target.value;
-      this.renderHistoryList();
-      this.renderHistoryFilterSummary();
+    this.elements.purchasedCategoryFilter.addEventListener("change", (event) => {
+      this.purchasedCategoryId = event.target.value;
+      this.renderPurchasedList();
     });
-    this.elements.historyEndDate.addEventListener("change", (event) => {
-      this.historyEndDate = event.target.value;
-      this.renderHistoryList();
-      this.renderHistoryFilterSummary();
-    });
-    this.elements.historyCategoryFilter.addEventListener("change", (event) => {
-      this.historyCategoryId = event.target.value;
-      this.renderHistoryList();
-      this.renderHistoryFilterSummary();
-    });
-    this.elements.resetHistoryFilterButton.addEventListener("click", () => this.resetHistoryFilters());
-    this.elements.historyList.addEventListener("click", (event) => this.handleHistoryClick(event));
+    this.elements.purchasedList.addEventListener("click", (event) => this.handlePurchasedClick(event));
 
     this.elements.categoryForm.addEventListener("submit", (event) => this.handleCategorySubmit(event));
     this.elements.categoryList.addEventListener("click", (event) => this.handleCategoryClick(event));
@@ -199,30 +180,30 @@ window.ShoppingApp.UI = class UI {
     if (!confirm("カートの商品を会計済みにしますか？")) return;
 
     const checkedOutItems = this.shoppingManager.checkoutCart();
-    checkedOutItems.forEach((item) => this.historyManager.addRecord(item, "purchased"));
+    checkedOutItems.forEach((item) => this.purchasedManager.recordPurchase(item));
     this.renderListAndCart();
-    this.renderHistoryList();
+    this.renderPurchasedList();
     this.showToast("会計済みにしました");
   }
 
-  handleHistoryClick(event) {
-    const recordDeleteButton = event.target.closest("[data-action='delete-history-record']");
-    if (recordDeleteButton) {
-      const recordId = Number(recordDeleteButton.closest("[data-history-id]").dataset.historyId);
-      if (!confirm("本当に削除しますか？")) return;
-      this.historyManager.deleteRecord(recordId);
-      this.renderHistoryList();
-      this.showToast("履歴を削除しました");
+  handlePurchasedClick(event) {
+    const row = event.target.closest("[data-purchased-id]");
+    if (!row) return;
+    const purchasedItem = this.purchasedManager.getAll().find((item) => item.id === Number(row.dataset.purchasedId));
+    if (!purchasedItem) return;
+
+    if (event.target.closest("[data-action='add-purchased-to-list']")) {
+      this.shoppingManager.add({ name: purchasedItem.name, count: 1, categoryId: purchasedItem.categoryId });
+      this.renderListAndCart();
+      this.showToast(`${purchasedItem.name}をリストに追加しました`);
       return;
     }
 
-    const dayDeleteButton = event.target.closest("[data-action='delete-history-day']");
-    if (dayDeleteButton) {
-      const dateKey = dayDeleteButton.closest("[data-date-key]").dataset.dateKey;
-      if (!confirm("この日の履歴を本当に削除しますか？")) return;
-      this.historyManager.deleteByDate(dateKey);
-      this.renderHistoryList();
-      this.showToast("この日の履歴を削除しました");
+    if (event.target.closest("[data-action='delete-purchased']")) {
+      if (!confirm(`${purchasedItem.name}を購入済み商品から削除しますか？`)) return;
+      this.purchasedManager.delete(purchasedItem.id);
+      this.renderPurchasedList();
+      this.showToast("購入済み商品から削除しました");
     }
   }
 
@@ -263,7 +244,7 @@ window.ShoppingApp.UI = class UI {
     const fallback = categories.find((category) => category.id !== id);
     this.categoryManager.delete(id);
     this.shoppingManager.replaceCategory(id, fallback.id);
-    this.historyManager.replaceCategory(id, fallback.id);
+    this.purchasedManager.replaceCategory(id, fallback.id);
     this.renderAll();
     this.showToast("カテゴリーを削除しました");
   }
@@ -291,25 +272,11 @@ window.ShoppingApp.UI = class UI {
     this.showToast("保存しました");
   }
 
-  resetHistoryFilters() {
-    this.historySearch = "";
-    this.historyStartDate = "";
-    this.historyEndDate = "";
-    this.historyCategoryId = "all";
-    this.elements.historySearch.value = "";
-    this.elements.historyStartDate.value = "";
-    this.elements.historyEndDate.value = "";
-    this.elements.historyCategoryFilter.value = "all";
-    this.renderHistoryList();
-    this.renderHistoryFilterSummary();
-  }
-
   renderAll() {
     this.renderCategoryOptions();
     this.renderListAndCart();
-    this.renderHistoryList();
+    this.renderPurchasedList();
     this.renderCategories();
-    this.renderHistoryFilterSummary();
   }
 
   renderListAndCart() {
@@ -321,7 +288,7 @@ window.ShoppingApp.UI = class UI {
     const categories = this.categoryManager.getAll();
     this.fillCategorySelect(this.elements.itemCategory, categories);
     this.fillCategorySelect(this.elements.editCategory, categories);
-    this.fillFilterSelect(this.elements.historyCategoryFilter, categories, this.historyCategoryId);
+    this.fillFilterSelect(this.elements.purchasedCategoryFilter, categories, this.purchasedCategoryId);
   }
 
   fillCategorySelect(selectElement, categories) {
@@ -402,57 +369,36 @@ window.ShoppingApp.UI = class UI {
     `;
   }
 
-  renderHistoryList() {
-    const records = this.historyManager
-      .getRecentMonths(3)
-      .filter((record) => record.action === "purchased")
-      .filter((record) => record.name.toLowerCase().includes(this.historySearch))
-      .filter((record) => this.historyCategoryId === "all" || String(record.categoryId) === this.historyCategoryId)
-      .filter((record) => this.isInHistoryDateRange(record.date));
-    this.elements.historyCountSummary.textContent = `${records.length}件`;
-    if (records.length === 0) {
-      this.elements.historyList.innerHTML = `<p class="empty-message">条件に合う履歴はありません。</p>`;
+  renderPurchasedList() {
+    const items = this.purchasedManager
+      .getAll()
+      .filter((item) => item.name.toLocaleLowerCase("ja-JP").includes(this.purchasedSearch))
+      .filter((item) => this.purchasedCategoryId === "all" || String(item.categoryId) === this.purchasedCategoryId)
+      .sort((a, b) => new Date(b.lastPurchasedAt) - new Date(a.lastPurchasedAt));
+    this.elements.purchasedCountSummary.textContent = `${items.length}件`;
+    if (items.length === 0) {
+      const message = this.purchasedSearch || this.purchasedCategoryId !== "all"
+        ? "条件に合う購入済み商品はありません。"
+        : "会計済みにした商品がここに蓄積されます。";
+      this.elements.purchasedList.innerHTML = `<p class="empty-message">${message}</p>`;
       return;
     }
-    const groups = this.historyManager.groupByDate(records);
-    this.elements.historyList.innerHTML = groups.map((group) => this.createHistoryGroupHtml(group)).join("");
+    this.elements.purchasedList.innerHTML = items.map((item) => this.createPurchasedItemHtml(item)).join("");
   }
 
-  isInHistoryDateRange(value) {
-    const dateKey = this.historyManager.getDateKey(value);
-    if (this.historyStartDate && dateKey < this.historyStartDate) return false;
-    if (this.historyEndDate && dateKey > this.historyEndDate) return false;
-    return true;
-  }
-
-  createHistoryGroupHtml(group) {
+  createPurchasedItemHtml(item) {
+    const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
     return `
-      <section class="history-group" data-date-key="${group.dateKey}">
-        <div class="history-group-header">
-          <h2>${this.formatDateHeader(group.dateKey)}</h2>
-          <button class="small-button danger" type="button" data-action="delete-history-day">この日の履歴を削除</button>
-        </div>
-        <div class="history-group-items">${group.items.map((record) => this.createHistoryItemHtml(record)).join("")}</div>
-      </section>
-    `;
-  }
-
-  createHistoryItemHtml(record) {
-    const category = this.categoryManager.findById(record.categoryId) || this.categoryManager.getFallback();
-    const label = record.action === "purchased" ? "購入" : "追加";
-    return `
-      <article class="history-item" data-history-id="${record.id}" style="--category-color:${this.escapeHtml(category.color)}">
+      <article class="purchased-item" data-purchased-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
         <div class="item-main">
-          <p class="item-name">${this.escapeHtml(record.name)} ×${record.count}</p>
+          <p class="item-name">${this.escapeHtml(item.name)}</p>
           <div class="item-meta">
-            <span>${label}</span>
             <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-            <span>${this.formatTime(record.date)}</span>
+            <span>購入 ${item.purchaseCount}回</span>
           </div>
         </div>
-        <div class="history-actions">
-          <button class="small-button danger" type="button" data-action="delete-history-record">削除</button>
-        </div>
+        <button class="purchased-add-button" type="button" data-action="add-purchased-to-list">＋ リストへ</button>
+        <button class="purchased-delete-button" type="button" data-action="delete-purchased" aria-label="${this.escapeHtml(item.name)}を削除">削除</button>
       </article>
     `;
   }
@@ -473,19 +419,6 @@ window.ShoppingApp.UI = class UI {
       .join("");
   }
 
-  renderHistoryFilterSummary() {
-    const parts = [];
-    if (this.historySearch) parts.push(`検索中: ${this.historySearch}`);
-    if (this.historyStartDate || this.historyEndDate) parts.push(`日付: ${this.historyStartDate || "指定なし"}〜${this.historyEndDate || "指定なし"}`);
-    if (this.historyCategoryId !== "all") parts.push(`カテゴリー: ${this.getCategoryName(this.historyCategoryId)}`);
-    this.elements.historyFilterSummary.textContent =
-      parts.length > 0 ? parts.join(" / ") : "商品名・日付・カテゴリーで絞り込み";
-  }
-
-  getCategoryName(categoryId) {
-    return this.categoryManager.findById(Number(categoryId))?.name ?? "不明";
-  }
-
   toggleDarkMode() {
     const nextValue = !document.body.classList.contains("dark-mode");
     this.applyTheme(nextValue);
@@ -503,7 +436,7 @@ window.ShoppingApp.UI = class UI {
       ["type", "id", "name", "count", "categoryId", "status", "date", "color", "action"],
       ...this.shoppingManager.getAll().map((item) => ["shopping", item.id, item.name, item.count, item.categoryId, item.status, item.createdAt, "", ""]),
       ...this.categoryManager.getAll().map((category) => ["category", category.id, category.name, "", "", "", "", category.color, ""]),
-      ...this.historyManager.getAll().map((record) => ["history", record.id, record.name, record.count, record.categoryId, "", record.date, "", record.action]),
+      ...this.purchasedManager.getAll().map((item) => ["purchased", item.id, item.name, item.purchaseCount, item.categoryId, "", item.lastPurchasedAt, "", ""]),
     ];
     const csv = rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
@@ -522,7 +455,7 @@ window.ShoppingApp.UI = class UI {
     const text = await file.text();
     const rows = this.parseCsv(text.replace(/^\uFEFF/, ""));
     const [, ...dataRows] = rows;
-    const imported = { shoppingItems: [], categories: [], shoppingHistory: [] };
+    const imported = { shoppingItems: [], categories: [], purchasedItems: [] };
     dataRows.forEach(([type, id, name, count, categoryId, status, date, color, action]) => {
       if (!type || !name) return;
       const numericId = Number(id) || Date.now() + Math.floor(Math.random() * 10000);
@@ -537,14 +470,13 @@ window.ShoppingApp.UI = class UI {
           createdAt: date || new Date().toISOString(),
         });
       }
-      if (type === "history") {
-        imported.shoppingHistory.push({
+      if (type === "purchased" || (type === "history" && action === "purchased")) {
+        imported.purchasedItems.push({
           id: numericId,
           name,
-          count: Math.max(1, Number(count) || 1),
+          purchaseCount: type === "purchased" ? Math.max(1, Number(count) || 1) : 1,
           categoryId: Number(categoryId),
-          action: action || "added",
-          date: date || new Date().toISOString(),
+          lastPurchasedAt: date || new Date().toISOString(),
         });
       }
     });
@@ -555,7 +487,7 @@ window.ShoppingApp.UI = class UI {
     }
     this.storage.set("categories", imported.categories);
     this.storage.set("shoppingItems", imported.shoppingItems);
-    this.storage.set("shoppingHistory", imported.shoppingHistory);
+    this.storage.set("purchasedItems", this.purchasedManager.mergeDuplicates(imported.purchasedItems));
     event.target.value = "";
     this.renderAll();
     this.showToast("CSVを読み込みました");

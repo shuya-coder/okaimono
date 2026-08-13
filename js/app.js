@@ -1,17 +1,17 @@
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "2.0.0";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const { Storage, CategoryManager, ShoppingManager, HistoryManager, UI } = window.ShoppingApp;
+  const { Storage, CategoryManager, ShoppingManager, PurchasedManager, UI } = window.ShoppingApp;
   const storage = new Storage();
   const categoryManager = new CategoryManager(storage);
   const shoppingManager = new ShoppingManager(storage, categoryManager);
-  const historyManager = new HistoryManager(storage, categoryManager);
+  const purchasedManager = new PurchasedManager(storage, categoryManager);
 
   const ui = new UI({
     storage,
     categoryManager,
     shoppingManager,
-    historyManager,
+    purchasedManager,
     version: APP_VERSION,
   });
 

@@ -75,39 +75,21 @@
         </section>
       </section>
 
-      <section class="tab-panel" data-panel="history" aria-labelledby="historyTabButton">
-        <details class="collapsible-card" id="historySearchPanel">
-          <summary>
-            <span>
-              <strong>🔍 履歴を探す</strong>
-              <small id="historyFilterSummary">商品名・日付・カテゴリーで絞り込み</small>
-            </span>
-            <span class="chevron" aria-hidden="true">⌄</span>
-          </summary>
-          <div class="filter-body">
-            <label>
-              商品名
-              <input id="historySearch" type="search" placeholder="商品名で検索" autocomplete="off">
-            </label>
-            <label>
-              開始日
-              <input id="historyStartDate" type="date">
-            </label>
-            <label>
-              終了日
-              <input id="historyEndDate" type="date">
-            </label>
-            <label>
-              カテゴリー
-              <select id="historyCategoryFilter"></select>
-            </label>
-            <button id="resetHistoryFilterButton" class="secondary-button full-width" type="button">リセット</button>
-          </div>
-        </details>
+      <section class="tab-panel" data-panel="purchased" aria-labelledby="purchasedTabButton">
+        <section class="purchased-toolbar" aria-label="購入済み商品の絞り込み">
+          <label>
+            商品名で検索
+            <input id="purchasedSearch" type="search" placeholder="例: 牛乳" autocomplete="off">
+          </label>
+          <label>
+            カテゴリー
+            <select id="purchasedCategoryFilter"></select>
+          </label>
+        </section>
         <div class="list-status">
-          <span id="historyCountSummary" class="badge" aria-live="polite">0件</span>
+          <span id="purchasedCountSummary" class="badge" aria-live="polite">0件</span>
         </div>
-        <div id="historyList" class="item-list" aria-live="polite"></div>
+        <div id="purchasedList" class="purchased-list" aria-live="polite"></div>
       </section>
 
       <section class="tab-panel" data-panel="settings" aria-labelledby="settingsTabButton">
@@ -153,7 +135,7 @@
   <nav class="tab-nav" aria-label="メインメニュー">
     <button id="listTabButton" class="tab-button active" type="button" data-tab="list">📝<span>リスト</span></button>
     <button id="cartTabButton" class="tab-button" type="button" data-tab="cart">🛒<span>カート</span></button>
-    <button id="historyTabButton" class="tab-button" type="button" data-tab="history">📜<span>履歴</span></button>
+    <button id="purchasedTabButton" class="tab-button" type="button" data-tab="purchased">🧺<span>購入済み</span></button>
     <button id="settingsTabButton" class="tab-button" type="button" data-tab="settings">⚙<span>設定</span></button>
   </nav>
 

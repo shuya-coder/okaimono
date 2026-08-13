@@ -66,7 +66,10 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     if (!trimmedName) return null;
 
     const items = this.getAll();
-    const existingItem = items.find((item) => item.name === trimmedName && item.status === "list");
+    const normalizedName = trimmedName.toLocaleLowerCase("ja-JP");
+    const existingItem = items.find(
+      (item) => item.name.toLocaleLowerCase("ja-JP") === normalizedName && item.status === "list"
+    );
     const now = new Date().toISOString();
 
     if (existingItem) {
@@ -78,7 +81,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
       };
       // 同じミリ秒で複数回追加されても、更新した商品が確実に先頭へ来るよう配列順も更新する。
       this.save([updatedItem, ...items.filter((item) => item.id !== existingItem.id)]);
-      return { ...updatedItem, historyCount: safeCount };
+      return updatedItem;
     }
 
     const item = {
@@ -91,7 +94,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
       createdAt: now,
     };
     this.save([item, ...items]);
-    return { ...item, historyCount: safeCount };
+    return item;
   }
 
   createId() {
