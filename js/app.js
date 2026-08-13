@@ -1,4 +1,4 @@
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.0.1";
 
 document.addEventListener("DOMContentLoaded", () => {
   const { Storage, CategoryManager, ShoppingManager, PurchasedManager, UI } = window.ShoppingApp;
@@ -18,8 +18,11 @@ document.addEventListener("DOMContentLoaded", () => {
   ui.init();
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch((error) => {
-      console.warn("Service worker registration failed", error);
-    });
+    navigator.serviceWorker
+      .register("sw.js")
+      .then((registration) => registration.update())
+      .catch((error) => {
+        console.warn("Service worker registration failed", error);
+      });
   }
 });

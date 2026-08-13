@@ -286,15 +286,23 @@ window.ShoppingApp.UI = class UI {
 
   renderCategoryOptions() {
     const categories = this.categoryManager.getAll();
-    this.fillCategorySelect(this.elements.itemCategory, categories);
+    const currentItemCategoryId = this.elements.itemCategory.value;
+    const defaultCategory = categories.find((category) => category.name === "食料品") || categories[0];
+    const selectedItemCategoryId = categories.some(
+      (category) => String(category.id) === currentItemCategoryId
+    )
+      ? currentItemCategoryId
+      : String(defaultCategory?.id ?? "");
+    this.fillCategorySelect(this.elements.itemCategory, categories, selectedItemCategoryId);
     this.fillCategorySelect(this.elements.editCategory, categories);
     this.fillFilterSelect(this.elements.purchasedCategoryFilter, categories, this.purchasedCategoryId);
   }
 
-  fillCategorySelect(selectElement, categories) {
+  fillCategorySelect(selectElement, categories, selectedValue = "") {
     selectElement.innerHTML = categories
       .map((category) => `<option value="${category.id}">${this.escapeHtml(category.name)}</option>`)
       .join("");
+    if (selectedValue) selectElement.value = selectedValue;
   }
 
   fillFilterSelect(selectElement, categories, selectedValue) {

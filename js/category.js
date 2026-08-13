@@ -47,8 +47,17 @@ window.ShoppingApp.CategoryManager = class CategoryManager {
       ];
     }, normalized);
 
-    this.save(withRequiredDefaults);
-    return withRequiredDefaults;
+    const orderedCategories = [
+      ...DEFAULT_CATEGORIES.map((defaultCategory) =>
+        withRequiredDefaults.find((category) => category.name === defaultCategory.name)
+      ),
+      ...withRequiredDefaults.filter(
+        (category) => !DEFAULT_CATEGORIES.some((defaultCategory) => defaultCategory.name === category.name)
+      ),
+    ].filter(Boolean);
+
+    this.save(orderedCategories);
+    return orderedCategories;
   }
 
   save(categories) {
