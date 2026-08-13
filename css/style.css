@@ -462,15 +462,32 @@ input[type="color"] {
   white-space: nowrap;
 }
 
+.purchased-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .purchased-delete-button {
-  grid-column: 1 / -1;
-  justify-self: end;
-  padding: 4px 7px;
-  border: 0;
-  background: transparent;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: 12px;
+  background: var(--surface);
   color: var(--danger);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 800;
+}
+
+@media (max-width: 420px) {
+  .purchased-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .purchased-add-button,
+  .purchased-delete-button {
+    padding-inline: 9px;
+  }
 }
 
 .shopping-item {

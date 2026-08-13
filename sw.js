@@ -1,4 +1,4 @@
-const CACHE_NAME = "shopping-app-v2.0.1";
+const CACHE_NAME = "shopping-app-v2.0.3";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -200,10 +200,10 @@ window.ShoppingApp.UI = class UI {
     }
 
     if (event.target.closest("[data-action='delete-purchased']")) {
-      if (!confirm(`${purchasedItem.name}を購入済み商品から削除しますか？`)) return;
+      if (!confirm(`${purchasedItem.name}を履歴から削除しますか？`)) return;
       this.purchasedManager.delete(purchasedItem.id);
       this.renderPurchasedList();
-      this.showToast("購入済み商品から削除しました");
+      this.showToast("履歴から削除しました");
     }
   }
 
@@ -386,7 +386,7 @@ window.ShoppingApp.UI = class UI {
     this.elements.purchasedCountSummary.textContent = `${items.length}件`;
     if (items.length === 0) {
       const message = this.purchasedSearch || this.purchasedCategoryId !== "all"
-        ? "条件に合う購入済み商品はありません。"
+        ? "条件に合う商品はありません。"
         : "会計済みにした商品がここに蓄積されます。";
       this.elements.purchasedList.innerHTML = `<p class="empty-message">${message}</p>`;
       return;
@@ -402,13 +402,21 @@ window.ShoppingApp.UI = class UI {
           <p class="item-name">${this.escapeHtml(item.name)}</p>
           <div class="item-meta">
             <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-            <span>購入 ${item.purchaseCount}回</span>
+            <span>最終購入 ${this.formatPurchasedDate(item.lastPurchasedAt)}</span>
           </div>
         </div>
-        <button class="purchased-add-button" type="button" data-action="add-purchased-to-list">＋ リストへ</button>
-        <button class="purchased-delete-button" type="button" data-action="delete-purchased" aria-label="${this.escapeHtml(item.name)}を削除">削除</button>
+        <div class="purchased-actions">
+          <button class="purchased-add-button" type="button" data-action="add-purchased-to-list">＋ リストへ</button>
+          <button class="purchased-delete-button" type="button" data-action="delete-purchased" aria-label="${this.escapeHtml(item.name)}を削除">削除</button>
+        </div>
       </article>
     `;
+  }
+
+  formatPurchasedDate(value) {
+    return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "short", day: "numeric" }).format(
+      new Date(value)
+    );
   }
 
   renderCategories() {
