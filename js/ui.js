@@ -9,6 +9,7 @@ window.ShoppingApp.UI = class UI {
     this.version = version;
     this.purchasedSearch = "";
     this.purchasedCategoryId = "all";
+    this.purchasedSort = "recent";
     this.toastTimer = null;
     this.elements = {};
   }
@@ -38,6 +39,7 @@ window.ShoppingApp.UI = class UI {
       increaseCount: document.querySelector("#increaseCount"),
       purchasedSearch: document.querySelector("#purchasedSearch"),
       purchasedCategoryFilter: document.querySelector("#purchasedCategoryFilter"),
+      purchasedSort: document.querySelector("#purchasedSort"),
       purchasedCountSummary: document.querySelector("#purchasedCountSummary"),
       purchasedList: document.querySelector("#purchasedList"),
       categoryForm: document.querySelector("#categoryForm"),
@@ -80,6 +82,10 @@ window.ShoppingApp.UI = class UI {
     });
     this.elements.purchasedCategoryFilter.addEventListener("change", (event) => {
       this.purchasedCategoryId = event.target.value;
+      this.renderPurchasedList();
+    });
+    this.elements.purchasedSort.addEventListener("change", (event) => {
+      this.purchasedSort = event.target.value;
       this.renderPurchasedList();
     });
     this.elements.purchasedList.addEventListener("click", (event) => this.handlePurchasedClick(event));
@@ -381,8 +387,8 @@ window.ShoppingApp.UI = class UI {
     const items = this.purchasedManager
       .getAll()
       .filter((item) => item.name.toLocaleLowerCase("ja-JP").includes(this.purchasedSearch))
-      .filter((item) => this.purchasedCategoryId === "all" || String(item.categoryId) === this.purchasedCategoryId)
-      .sort((a, b) => new Date(b.lastPurchasedAt) - new Date(a.lastPurchasedAt));
+      .filter((item) => this.purchasedCategoryId === "all" || String(item.categoryId) === this.purchasedCategoryId);
+    this.sortPurchasedItems(items);
     this.elements.purchasedCountSummary.textContent = `${items.length}件`;
     if (items.length === 0) {
       const message = this.purchasedSearch || this.purchasedCategoryId !== "all"
@@ -392,6 +398,23 @@ window.ShoppingApp.UI = class UI {
       return;
     }
     this.elements.purchasedList.innerHTML = items.map((item) => this.createPurchasedItemHtml(item)).join("");
+  }
+
+  sortPurchasedItems(items) {
+    const newestFirst = (a, b) => new Date(b.lastPurchasedAt) - new Date(a.lastPurchasedAt);
+    if (this.purchasedSort === "name") {
+      items.sort((a, b) => a.name.localeCompare(b.name, "ja", { sensitivity: "base" }));
+      return;
+    }
+    if (this.purchasedSort === "oldest") {
+      items.sort((a, b) => new Date(a.lastPurchasedAt) - new Date(b.lastPurchasedAt));
+      return;
+    }
+    if (this.purchasedSort === "frequent") {
+      items.sort((a, b) => b.purchaseCount - a.purchaseCount || newestFirst(a, b));
+      return;
+    }
+    items.sort(newestFirst);
   }
 
   createPurchasedItemHtml(item) {

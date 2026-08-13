@@ -1,15 +1,15 @@
-const CACHE_NAME = "shopping-app-v2.0.4";
+const CACHE_NAME = "shopping-app-v2.1.0";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./css/style.css?v=2.0.4",
-  "./js/storage.js?v=2.0.4",
-  "./js/category.js?v=2.0.4",
-  "./js/shopping.js?v=2.0.4",
-  "./js/history.js?v=2.0.4",
-  "./js/ui.js?v=2.0.4",
-  "./js/app.js?v=2.0.4",
+  "./css/style.css?v=2.1.0",
+  "./js/storage.js?v=2.1.0",
+  "./js/category.js?v=2.1.0",
+  "./js/shopping.js?v=2.1.0",
+  "./js/history.js?v=2.1.0",
+  "./js/ui.js?v=2.1.0",
+  "./js/app.js?v=2.1.0",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon.svg",
