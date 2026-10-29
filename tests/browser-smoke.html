@@ -55,7 +55,7 @@
     report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v3.0.0");
+    const cache = await win.caches.open("shopping-app-v3.2.0");
     const [jpn, wasm, worker] = await Promise.all([cache.match("/vendor/tessdata/jpn.traineddata.gz"), cache.match("/vendor/tesseract-core/tesseract-core-lstm.wasm"), cache.match("/vendor/tesseract/worker.min.js")]);
     report("OCR資産をオフラインキャッシュ", Boolean(jpn && wasm && worker));
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
