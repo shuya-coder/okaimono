@@ -7,177 +7,67 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="買い物リスト">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest?v=3.0.0">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=2.1.0">
+  <link rel="stylesheet" href="css/style.css?v=3.0.0">
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">買い物中でもすばやく操作</p>
-        <h1>買い物リスト</h1>
-      </div>
-      <button id="themeQuickToggle" class="icon-button" type="button" aria-label="ダークモード切替">🌙</button>
-    </header>
-
+    <header class="app-header"><div><p class="eyebrow">買い物中でもすばやく操作</p><h1>買い物リスト</h1></div><button id="themeQuickToggle" class="icon-button" type="button" aria-label="ダークモード切替">🌙</button></header>
     <main id="mainContent">
-      <section class="tab-panel active" data-panel="list" aria-labelledby="listTabButton">
+      <section class="tab-panel active" data-panel="shopping" aria-labelledby="shoppingTabButton">
         <details class="collapsible-card add-card" id="addItemPanel">
-          <summary>
-            <span>
-              <strong>＋ 商品を追加</strong>
-              <small>商品名・個数・カテゴリーを入力</small>
-            </span>
-            <span class="chevron" aria-hidden="true">⌄</span>
-          </summary>
+          <summary><span><strong>＋ 商品を追加</strong><small>商品名・個数・カテゴリーを入力</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
           <form id="addItemForm" class="form-stack add-form-body">
-            <label>
-              商品名
-              <input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required>
-            </label>
-            <div class="form-row">
-              <label>
-                個数
-                <div class="stepper">
-                  <button id="decreaseCount" type="button" aria-label="個数を減らす">−</button>
-                  <input id="itemCount" type="number" inputmode="numeric" min="1" value="1" required aria-label="個数">
-                  <button id="increaseCount" type="button" aria-label="個数を増やす">＋</button>
-                </div>
-              </label>
-              <label>
-                カテゴリー
-                <select id="itemCategory" required></select>
-              </label>
-            </div>
+            <label>商品名<input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required></label>
+            <div class="form-row"><label>個数<div class="stepper"><button id="decreaseCount" type="button" aria-label="個数を減らす">−</button><input id="itemCount" type="number" inputmode="numeric" min="1" value="1" required aria-label="個数"><button id="increaseCount" type="button" aria-label="個数を増やす">＋</button></div></label><label>カテゴリー<select id="itemCategory" required></select></label></div>
             <button class="primary-button full-width" type="submit">➕ リストに追加</button>
           </form>
         </details>
-
-        <div class="list-status">
-          <span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span>
-        </div>
-        <section class="list-section" aria-label="買い物リスト">
-          <div id="shoppingList" class="item-list" aria-live="polite"></div>
-        </section>
+        <div class="list-status"><span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span></div>
+        <div id="shoppingList" class="item-list" aria-live="polite"></div>
+        <details class="collapsible-card basket-card" id="basketPanel" open>
+          <summary><span><strong>🧺 カゴに入れた商品</strong><small>買い物終了前に確認・リストへ戻せます</small></span><span id="cartCountSummary" class="badge" aria-live="polite">0件</span></summary>
+          <div class="basket-body"><div id="cartList" class="item-list" aria-live="polite"></div><button id="checkoutButton" class="primary-button full-width checkout-button" type="button" disabled>買い物終了</button></div>
+        </details>
       </section>
 
-      <section class="tab-panel" data-panel="cart" aria-labelledby="cartTabButton">
-        <section class="card">
-          <div class="section-title">
-            <h2>カート</h2>
-            <span id="cartCountSummary" class="badge" aria-live="polite">0件</span>
-          </div>
-          <div id="cartList" class="item-list" aria-live="polite"></div>
-          <button id="checkoutButton" class="primary-button full-width checkout-button" type="button" disabled>会計済み</button>
+      <section class="tab-panel" data-panel="receipts" aria-labelledby="receiptsTabButton">
+        <section class="monthly-spend-card"><label for="receiptMonth">対象月</label><input id="receiptMonth" type="month"><p>今月の支出</p><strong id="monthlySpend">¥0</strong></section>
+        <section class="card receipt-capture-card">
+          <div class="section-title"><h2>レシートを登録</h2><span class="privacy-badge">端末内だけで解析</span></div>
+          <div class="receipt-capture-actions"><label class="primary-button file-button">📷 撮影・画像選択<input id="receiptImageInput" type="file" accept="image/*" capture="environment"></label><button id="manualReceiptButton" class="secondary-button" type="button">✍ 手入力</button></div>
+          <div id="ocrProgress" class="ocr-progress" hidden><progress id="ocrProgressBar" max="1" value="0"></progress><span id="ocrProgressText">準備中…</span></div>
+          <p class="note">画像はブラウザ内OCRにだけ使い、解析後は保存しません。初回OCRは言語データの読込に時間がかかります。</p>
         </section>
+        <section id="receiptEditor" class="card receipt-editor" hidden>
+          <div class="section-title"><h2 id="receiptEditorTitle">レシート内容の確認</h2><span id="receiptReviewBadge" class="review-badge" hidden>要確認</span></div>
+          <form id="receiptForm" class="form-stack"><input id="receiptId" type="hidden"><div class="receipt-fields"><label>店舗名<input id="receiptStore" type="text" required></label><label>購入日時<input id="receiptDate" type="datetime-local" required></label><label>割引額<input id="receiptDiscount" type="number" inputmode="numeric" min="0" step="1" value="0"></label><label>税額<input id="receiptTax" type="number" inputmode="numeric" min="0" step="1" value="0"></label><label>確認した合計額<input id="receiptTotal" type="number" inputmode="numeric" min="0" step="1" required></label></div><div class="section-title"><h3>商品明細</h3><button id="addReceiptItemButton" class="secondary-button compact-button" type="button">＋ 明細</button></div><div id="receiptItemsEditor" class="receipt-items-editor"></div><div id="receiptDifferenceWarning" class="warning-message" hidden></div><label>メモ<textarea id="receiptNotes" rows="2"></textarea></label><details><summary>OCR原文を確認</summary><pre id="receiptRawText" class="ocr-raw-text"></pre></details><div class="dialog-actions"><button id="cancelReceiptButton" class="secondary-button" type="button">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form>
+        </section>
+        <section class="card"><div class="section-title"><h2>支出の内訳</h2><span id="receiptRecordCount" class="badge">0件</span></div><div class="analytics-grid"><div><h3>日別</h3><div id="dailySpend" class="summary-list"></div></div><div><h3>店舗別</h3><div id="storeSpend" class="summary-list"></div></div><div><h3>カテゴリ別</h3><div id="categorySpend" class="summary-list"></div></div></div></section>
+        <section class="card"><div class="section-title"><h2>価格推移</h2></div><label>商品<select id="priceHistoryProduct"><option value="">商品を選択</option></select></label><div id="priceHistory" class="price-history"></div></section>
+        <section class="card"><div class="receipt-search-row"><label>レシート検索<input id="receiptSearch" type="search" placeholder="店舗名・商品名"></label><label>月<select id="receiptMonthFilter"><option value="all">すべて</option></select></label></div><div id="receiptList" class="receipt-list" aria-live="polite"></div></section>
       </section>
 
       <section class="tab-panel" data-panel="purchased" aria-labelledby="purchasedTabButton">
-        <section class="purchased-toolbar" aria-label="履歴商品の絞り込み">
-          <label>
-            商品名で検索
-            <input id="purchasedSearch" type="search" placeholder="例: 牛乳" autocomplete="off">
-          </label>
-          <label>
-            カテゴリー
-            <select id="purchasedCategoryFilter"></select>
-          </label>
-          <label>
-            並び替え
-            <select id="purchasedSort">
-              <option value="recent">最終購入順</option>
-              <option value="name">あいうえお順</option>
-              <option value="oldest">古いもの順</option>
-              <option value="frequent">購入頻度が高い順</option>
-            </select>
-          </label>
-        </section>
-        <div class="list-status">
-          <span id="purchasedCountSummary" class="badge" aria-live="polite">0件</span>
-        </div>
-        <div id="purchasedList" class="purchased-list" aria-live="polite"></div>
+        <section class="purchased-toolbar" aria-label="購入履歴商品の絞り込み"><label>商品名で検索<input id="purchasedSearch" type="search" placeholder="例: 牛乳" autocomplete="off"></label><label>カテゴリー<select id="purchasedCategoryFilter"></select></label><label>並び替え<select id="purchasedSort"><option value="recent">最終購入順</option><option value="name">あいうえお順</option><option value="oldest">古いもの順</option><option value="frequent">購入頻度が高い順</option></select></label></section>
+        <div class="list-status"><span id="purchasedCountSummary" class="badge" aria-live="polite">0件</span></div><div id="purchasedList" class="purchased-list" aria-live="polite"></div>
       </section>
 
       <section class="tab-panel" data-panel="settings" aria-labelledby="settingsTabButton">
-        <section class="card">
-          <div class="section-title">
-            <h2>カテゴリー</h2>
-            <span class="badge">Version <span id="appVersion"></span></span>
-          </div>
-          <form id="categoryForm" class="category-form">
-            <label>
-              名前
-              <input id="categoryName" type="text" autocomplete="off" placeholder="例: 冷凍食品" required>
-            </label>
-            <label>
-              色
-              <input id="categoryColor" type="color" value="#4CAF50">
-            </label>
-            <button class="primary-button" type="submit">📂 追加</button>
-          </form>
-          <div id="categoryList" class="category-list" aria-live="polite"></div>
-        </section>
-
-        <section class="card">
-          <div class="section-title">
-            <h2>設定</h2>
-            <span class="badge">端末に保存</span>
-          </div>
-          <div class="settings-grid">
-            <button id="darkModeButton" class="secondary-button" type="button">🌙 ダークモード</button>
-            <button id="exportCsvButton" class="secondary-button" type="button">⬇ CSV保存</button>
-            <label class="file-button">
-              ⬆ CSV読込
-              <input id="importCsvInput" type="file" accept=".csv,text/csv">
-            </label>
-            <button id="resetStorageButton" class="danger-button" type="button">初期化</button>
-          </div>
-          <p class="note">データはこのスマートフォンまたはブラウザに保存されます。オフラインでも使えます。</p>
-        </section>
+        <section class="card"><div class="section-title"><h2>カテゴリー</h2><span class="badge">Version <span id="appVersion"></span></span></div><form id="categoryForm" class="category-form"><label>名前<input id="categoryName" type="text" autocomplete="off" placeholder="例: 冷凍食品" required></label><label>色<input id="categoryColor" type="color" value="#4CAF50"></label><button class="primary-button" type="submit">📂 追加</button></form><div id="categoryList" class="category-list" aria-live="polite"></div></section>
+        <section class="card"><div class="section-title"><h2>設定・バックアップ</h2><span class="badge">端末に保存</span></div><div class="settings-grid"><button id="darkModeButton" class="secondary-button" type="button">🌙 ダークモード</button><button id="exportCsvButton" class="secondary-button" type="button">⬇ CSV保存</button><label class="file-button">⬆ CSV読込<input id="importCsvInput" type="file" accept=".csv,text/csv"></label><button id="exportJsonButton" class="secondary-button" type="button">⬇ 全データJSON</button><label class="file-button">⬆ JSON復元<input id="importJsonInput" type="file" accept=".json,application/json"></label><button id="resetStorageButton" class="danger-button" type="button">初期化</button></div><p class="note">CSVは従来データ用です。JSONは買い物・履歴・カテゴリ・設定・レシート・学習内容をまとめて保存します。復元前に内容を確認できます。</p></section>
       </section>
     </main>
   </div>
-
-  <nav class="tab-nav" aria-label="メインメニュー">
-    <button id="listTabButton" class="tab-button active" type="button" data-tab="list">📝<span>リスト</span></button>
-    <button id="cartTabButton" class="tab-button" type="button" data-tab="cart">🛒<span>カート</span></button>
-    <button id="purchasedTabButton" class="tab-button" type="button" data-tab="purchased">📜<span>履歴</span></button>
-    <button id="settingsTabButton" class="tab-button" type="button" data-tab="settings">⚙<span>設定</span></button>
-  </nav>
-
-  <dialog id="editDialog" aria-labelledby="editDialogTitle">
-    <form id="editForm" method="dialog" class="dialog-card">
-      <h2 id="editDialogTitle">商品を編集</h2>
-      <input id="editItemId" type="hidden">
-      <label>
-        商品名
-        <input id="editName" type="text" required>
-      </label>
-      <label>
-        個数
-        <input id="editCount" type="number" inputmode="numeric" min="1" value="1" required>
-      </label>
-      <label>
-        カテゴリー
-        <select id="editCategory"></select>
-      </label>
-      <div class="dialog-actions">
-        <button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button>
-        <button class="primary-button" type="submit">保存</button>
-      </div>
-    </form>
-  </dialog>
-
+  <nav class="tab-nav" aria-label="メインメニュー"><button id="shoppingTabButton" class="tab-button active" type="button" data-tab="shopping">📝<span>買い物</span></button><button id="receiptsTabButton" class="tab-button" type="button" data-tab="receipts">🧾<span>レシート</span></button><button id="purchasedTabButton" class="tab-button" type="button" data-tab="purchased">📜<span>購入履歴</span></button><button id="settingsTabButton" class="tab-button" type="button" data-tab="settings">⚙<span>設定</span></button></nav>
+  <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
+  <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <script src="js/storage.js?v=2.1.0"></script>
-  <script src="js/category.js?v=2.1.0"></script>
-  <script src="js/shopping.js?v=2.1.0"></script>
-  <script src="js/history.js?v=2.1.0"></script>
-  <script src="js/ui.js?v=2.1.0"></script>
-  <script src="js/app.js?v=2.1.0"></script>
+  <script src="vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
+  <script src="js/storage.js?v=3.0.0"></script><script src="js/category.js?v=3.0.0"></script><script src="js/shopping.js?v=3.0.0"></script><script src="js/history.js?v=3.0.0"></script><script src="js/receipt-db.js?v=3.0.0"></script><script src="js/receipt-manager.js?v=3.0.0"></script><script src="js/receipt-ui.js?v=3.0.0"></script><script src="js/ui.js?v=3.0.0"></script><script src="js/app.js?v=3.0.0"></script>
 </body>
 </html>

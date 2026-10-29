@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>QA running</title><style>body{font-family:system-ui;margin:20px;background:#f7f9fc;color:#152033}h1{font-size:22px}.pass{color:#087f23}.fail{color:#b42318}li{padding:5px}iframe{position:absolute;left:-10000px;width:390px;height:844px}</style></head>
+<body><h1>買い物アプリ ブラウザ回帰テスト</h1><ol id="results"></ol><p id="summary">実行中…</p><script>
+(async () => {
+  const results = document.querySelector("#results");
+  const summary = document.querySelector("#summary");
+  let failures = 0;
+  const report = (name, passed, detail = "") => { const li = document.createElement("li"); li.className = passed ? "pass" : "fail"; li.textContent = `${passed ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`; results.append(li); if (!passed) failures += 1; };
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const waitFor = async (check, timeout = 30000) => { const start = Date.now(); while (Date.now() - start < timeout) { const value = await check(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 100)); } throw new Error("timeout"); };
+  try {
+    localStorage.clear();
+    localStorage.setItem("shoppingApp:categories", JSON.stringify([{id:10,name:"食料品",color:"#4CAF50"},{id:20,name:"日用品",color:"#2196F3"}]));
+    localStorage.setItem("shoppingApp:shoppingItems", JSON.stringify([{id:1,name:"残す商品",count:2,categoryId:10,status:"list",createdAt:"2026-10-01T00:00:00Z"},{id:2,name:"カゴ商品",count:1,categoryId:20,status:"cart",createdAt:"2026-10-02T00:00:00Z"}]));
+    localStorage.setItem("shoppingApp:purchasedItems", JSON.stringify([{id:3,name:"過去商品",categoryId:10,lastPurchasedAt:"2026-09-01T00:00:00Z",purchaseCount:2}]));
+    await new Promise((resolve, reject) => { const request = indexedDB.deleteDatabase("shoppingAppReceipts"); request.onsuccess = resolve; request.onerror = reject; request.onblocked = resolve; });
+    const frame = document.createElement("iframe"); frame.src = "/?qa=1"; document.body.append(frame); await new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+    const win = frame.contentWindow; const doc = frame.contentDocument;
+    const runtime = await waitFor(() => win.ShoppingApp?.runtime);
+    await waitFor(() => runtime.receiptUI.receipts);
+    report("既存LocalStorageを読込", doc.querySelector("#shoppingList").textContent.includes("残す商品") && doc.querySelector("#cartList").textContent.includes("カゴ商品") && doc.querySelector("#purchasedList").textContent.includes("過去商品"));
+    report("4タブ構成", [...doc.querySelectorAll(".tab-button span")].map((node) => node.textContent).join(",") === "買い物,レシート,購入履歴,設定");
+    win.confirm = () => true;
+    doc.querySelector("#checkoutButton").click();
+    await waitFor(() => runtime.shoppingManager.getCartItems().length === 0);
+    report("買い物終了でカゴだけ空になる", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && runtime.shoppingManager.getCartItems().length === 0);
+    report("買い物終了を購入履歴へ記録", runtime.purchasedManager.getAll().some((item) => item.name === "カゴ商品"));
+
+    doc.querySelector("#manualReceiptButton").click();
+    doc.querySelector("#receiptStore").value = "テスト店";
+    doc.querySelector("#receiptDate").value = "2026-10-29T12:00";
+    doc.querySelector("#receiptTotal").value = "1000";
+    runtime.receiptUI.currentItems[0] = {id:"item-1",rawName:"牛乳",name:"牛乳",quantity:1,unitPrice:1000,amount:1000,categoryId:10,uncertain:false};
+    runtime.receiptUI.renderItemEditor();
+    doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
+    await waitFor(async () => (await runtime.receiptManager.getAll()).length === 1);
+    const stored = (await runtime.receiptManager.getAll())[0];
+    report("レシートをIndexedDBへ保存", stored.storeName === "テスト店" && stored.total === 1000 && !Object.keys(stored).some((key) => /image|photo|blob/i.test(key)));
+    report("画像を永続保存しない", !JSON.stringify(stored).includes("data:image"));
+    report("月次集計", doc.querySelector("#monthlySpend").textContent.includes("1,000"));
+    runtime.receiptUI.openEditor(stored); doc.querySelector("#receiptTotal").value = "1100"; runtime.receiptUI.currentItems[0].amount = 1100; doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
+    await waitFor(async () => (await runtime.receiptManager.getAll())[0]?.total === 1100);
+    report("レシート編集", (await runtime.receiptManager.getAll())[0].total === 1100);
+    const parsed = await runtime.receiptManager.parseOcr("テスト店\n2026/10/29 12:00\n牛乳 238\n消費税 24\n合計 262", 90);
+    report("日本語OCR結果の構造化", parsed.storeName === "テスト店" && parsed.items.some((item) => item.name === "牛乳") && parsed.total === 262);
+    const latestReceipt = (await runtime.receiptManager.getAll())[0];
+    const duplicate = await runtime.receiptManager.save({...latestReceipt,id:"duplicate-test"});
+    report("重複レシート警告判定", Boolean(duplicate.duplicate));
+    await runtime.receiptManager.db.deleteReceipt("duplicate-test");
+
+    let backupText = ""; runtime.ui.downloadBlob = (content) => { backupText = content; }; await runtime.ui.exportJson(); const backup = JSON.parse(backupText);
+    report("JSONバックアップ", backup.format === "okaimono-backup" && backup.receiptData.receipts.length === 1 && backup.localStorage["shoppingApp:shoppingItems"].length === 1);
+    runtime.storage.set("shoppingItems", []); runtime.ui.pendingBackup = backup; await runtime.ui.confirmJsonImport();
+    report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
+    const registrations = await win.navigator.serviceWorker.getRegistrations();
+    report("Service Worker登録", registrations.length > 0);
+    const cache = await win.caches.open("shopping-app-v3.0.0");
+    const [jpn, wasm, worker] = await Promise.all([cache.match("/vendor/tessdata/jpn.traineddata.gz"), cache.match("/vendor/tesseract-core/tesseract-core-lstm.wasm"), cache.match("/vendor/tesseract/worker.min.js")]);
+    report("OCR資産をオフラインキャッシュ", Boolean(jpn && wasm && worker));
+    const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
+    report("不要な外部通信なし", foreign.length === 0, foreign.join(", "));
+    report("Tesseract.js読込", Boolean(win.Tesseract?.createWorker));
+  } catch (error) { report("テスト実行", false, error.stack || error.message); }
+  summary.textContent = failures ? `${failures}件失敗` : "すべて成功"; summary.className = failures ? "fail" : "pass"; document.title = failures ? "QA FAIL" : "QA PASS";
+})();
+</script></body></html>

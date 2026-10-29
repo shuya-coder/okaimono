@@ -3,6 +3,7 @@ window.ShoppingApp = window.ShoppingApp || {};
 const DEFAULT_CATEGORIES = [
   { name: "食料品", color: "#4CAF50" },
   { name: "日用品", color: "#2196F3" },
+  { name: "未分類", color: "#78909C" },
 ];
 
 const LEGACY_DEFAULT_CATEGORY_NAMES = ["飲み物", "野菜", "肉", "パン", "お菓子", "冷凍食品"];

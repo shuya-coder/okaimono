@@ -10,6 +10,8 @@ window.ShoppingApp.UI = class UI {
     this.purchasedSearch = "";
     this.purchasedCategoryId = "all";
     this.purchasedSort = "recent";
+    this.receiptUI = null;
+    this.pendingBackup = null;
     this.toastTimer = null;
     this.elements = {};
   }
@@ -50,6 +52,12 @@ window.ShoppingApp.UI = class UI {
       themeQuickToggle: document.querySelector("#themeQuickToggle"),
       exportCsvButton: document.querySelector("#exportCsvButton"),
       importCsvInput: document.querySelector("#importCsvInput"),
+      exportJsonButton: document.querySelector("#exportJsonButton"),
+      importJsonInput: document.querySelector("#importJsonInput"),
+      backupPreviewDialog: document.querySelector("#backupPreviewDialog"),
+      backupPreview: document.querySelector("#backupPreview"),
+      cancelBackupImport: document.querySelector("#cancelBackupImport"),
+      confirmBackupImport: document.querySelector("#confirmBackupImport"),
       resetStorageButton: document.querySelector("#resetStorageButton"),
       appVersion: document.querySelector("#appVersion"),
       editDialog: document.querySelector("#editDialog"),
@@ -101,6 +109,10 @@ window.ShoppingApp.UI = class UI {
     this.elements.themeQuickToggle.addEventListener("click", () => this.toggleDarkMode());
     this.elements.exportCsvButton.addEventListener("click", () => this.exportCsv());
     this.elements.importCsvInput.addEventListener("change", (event) => this.importCsv(event));
+    this.elements.exportJsonButton.addEventListener("click", () => this.exportJson());
+    this.elements.importJsonInput.addEventListener("change", (event) => this.prepareJsonImport(event));
+    this.elements.cancelBackupImport.addEventListener("click", () => this.cancelJsonImport());
+    this.elements.confirmBackupImport.addEventListener("click", () => this.confirmJsonImport());
     this.elements.resetStorageButton.addEventListener("click", () => this.resetStorage());
   }
 
@@ -111,6 +123,7 @@ window.ShoppingApp.UI = class UI {
       button.setAttribute("aria-current", isActive ? "page" : "false");
     });
     this.elements.tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tabName));
+    if (tabName === "receipts" && this.receiptUI) this.receiptUI.renderAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -147,7 +160,7 @@ window.ShoppingApp.UI = class UI {
       const item = this.shoppingManager.moveToCart(itemId);
       if (item) {
         this.renderListAndCart();
-        this.showToast("カートに入れました");
+        this.showToast("カゴに入れました");
       }
       return;
     }
@@ -176,6 +189,7 @@ window.ShoppingApp.UI = class UI {
 
     if (target.dataset.action === "increase") this.shoppingManager.changeCount(itemId, 1);
     if (target.dataset.action === "decrease") this.shoppingManager.changeCount(itemId, -1);
+    if (target.dataset.action === "edit") this.openEditDialog(itemId);
     if (target.dataset.action === "delete" && confirm("本当に削除しますか？")) this.shoppingManager.delete(itemId);
     this.renderListAndCart();
   }
@@ -183,13 +197,13 @@ window.ShoppingApp.UI = class UI {
   checkoutCart() {
     const cartItems = this.shoppingManager.getCartItems();
     if (cartItems.length === 0) return;
-    if (!confirm("カートの商品を会計済みにしますか？")) return;
+    if (!confirm("カゴに入れた商品で買い物を終了しますか？")) return;
 
     const checkedOutItems = this.shoppingManager.checkoutCart();
     checkedOutItems.forEach((item) => this.purchasedManager.recordPurchase(item));
     this.renderListAndCart();
     this.renderPurchasedList();
-    this.showToast("会計済みにしました");
+    this.showToast("買い物を終了し、購入履歴に記録しました");
   }
 
   handlePurchasedClick(event) {
@@ -237,7 +251,7 @@ window.ShoppingApp.UI = class UI {
     this.showToast("カテゴリーを更新しました");
   }
 
-  handleCategoryClick(event) {
+  async handleCategoryClick(event) {
     const deleteButton = event.target.closest("[data-action='delete-category']");
     if (!deleteButton) return;
     const id = Number(deleteButton.closest("[data-id]").dataset.id);
@@ -251,6 +265,7 @@ window.ShoppingApp.UI = class UI {
     this.categoryManager.delete(id);
     this.shoppingManager.replaceCategory(id, fallback.id);
     this.purchasedManager.replaceCategory(id, fallback.id);
+    if (this.receiptUI) await this.receiptUI.manager.replaceCategory(id, fallback.id);
     this.renderAll();
     this.showToast("カテゴリーを削除しました");
   }
@@ -346,7 +361,8 @@ window.ShoppingApp.UI = class UI {
         <div class="cart-icon" aria-hidden="true">📝</div>
       `,
       actionsHtml: `
-        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カートへ入れる">カート</button>
+        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カゴに入れた">カゴへ</button>
+        <button class="small-button" type="button" data-action="edit">編集</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
         <button class="small-button danger" type="button" data-action="delete">削除</button>
@@ -358,7 +374,8 @@ window.ShoppingApp.UI = class UI {
     return this.createItemHtml(item, {
       leadingHtml: `<div class="cart-icon" aria-hidden="true">🛒</div>`,
       actionsHtml: `
-        <button class="small-button return-list-button" type="button" data-action="return-list" aria-label="リストに戻す">戻す</button>
+        <button class="small-button return-list-button" type="button" data-action="return-list" aria-label="リストに戻す">リストへ</button>
+        <button class="small-button" type="button" data-action="edit">編集</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
         <button class="small-button danger" type="button" data-action="delete">削除</button>
@@ -532,9 +549,80 @@ window.ShoppingApp.UI = class UI {
     this.showToast("CSVを読み込みました");
   }
 
-  resetStorage() {
-    if (!confirm("本当に削除しますか？")) return;
+  async exportJson() {
+    const localData = {};
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(`${this.storage.namespace}:`)) {
+        try { localData[key] = JSON.parse(localStorage.getItem(key)); } catch { localData[key] = localStorage.getItem(key); }
+      }
+    }
+    const backup = {
+      format: "okaimono-backup",
+      version: 3,
+      exportedAt: new Date().toISOString(),
+      localStorage: localData,
+      receiptData: this.receiptUI ? await this.receiptUI.exportData() : { receipts: [], mappings: [] },
+    };
+    this.downloadBlob(JSON.stringify(backup, null, 2), `okaimono-backup-${new Date().toISOString().slice(0, 10)}.json`, "application/json");
+    this.showToast("全データをJSON保存しました");
+  }
+
+  async prepareJsonImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup?.format !== "okaimono-backup" || !backup.localStorage || !backup.receiptData) throw new Error("形式が違います");
+      const local = backup.localStorage;
+      const shopping = local[`${this.storage.namespace}:shoppingItems`] || [];
+      const purchased = local[`${this.storage.namespace}:purchasedItems`] || [];
+      const categories = local[`${this.storage.namespace}:categories`] || [];
+      const receipts = backup.receiptData.receipts || [];
+      this.elements.backupPreview.innerHTML = `<dl class="backup-summary"><dt>作成日時</dt><dd>${this.escapeHtml(this.formatDateTime(backup.exportedAt))}</dd><dt>買い物・カゴ</dt><dd>${shopping.length}件</dd><dt>購入履歴</dt><dd>${purchased.length}件</dd><dt>カテゴリー</dt><dd>${categories.length}件</dd><dt>レシート</dt><dd>${receipts.length}件</dd><dt>商品名の学習</dt><dd>${(backup.receiptData.mappings || []).length}件</dd></dl>`;
+      this.pendingBackup = backup;
+      this.elements.backupPreviewDialog.showModal();
+    } catch (error) {
+      alert(`JSONを確認できませんでした: ${error.message}`);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  cancelJsonImport() {
+    this.pendingBackup = null;
+    this.elements.backupPreviewDialog.close();
+  }
+
+  async confirmJsonImport() {
+    if (!this.pendingBackup) return;
+    const backup = this.pendingBackup;
     this.storage.clearAppData();
+    Object.entries(backup.localStorage).forEach(([key, value]) => {
+      if (key.startsWith(`${this.storage.namespace}:`)) localStorage.setItem(key, JSON.stringify(value));
+    });
+    if (this.receiptUI) await this.receiptUI.importData(backup.receiptData);
+    this.pendingBackup = null;
+    this.elements.backupPreviewDialog.close();
+    this.applyTheme(this.storage.get("darkMode", false));
+    this.renderAll();
+    this.showToast("JSONバックアップを復元しました");
+  }
+
+  downloadBlob(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async resetStorage() {
+    if (!confirm("買い物・購入履歴・カテゴリ・設定・レシートをすべて削除しますか？この操作は元に戻せません。")) return;
+    this.storage.clearAppData();
+    if (this.receiptUI) await this.receiptUI.importData({ receipts: [], mappings: [] });
     this.applyTheme(false);
     this.renderAll();
     this.showToast("初期化しました");

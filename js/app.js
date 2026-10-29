@@ -1,7 +1,7 @@
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "3.0.0";
 
-document.addEventListener("DOMContentLoaded", () => {
-  const { Storage, CategoryManager, ShoppingManager, PurchasedManager, UI } = window.ShoppingApp;
+document.addEventListener("DOMContentLoaded", async () => {
+  const { Storage, CategoryManager, ShoppingManager, PurchasedManager, ReceiptDB, ReceiptManager, ReceiptUI, UI } = window.ShoppingApp;
   const storage = new Storage();
   const categoryManager = new CategoryManager(storage);
   const shoppingManager = new ShoppingManager(storage, categoryManager);
@@ -16,6 +16,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   ui.init();
+
+  const receiptDB = new ReceiptDB();
+  const receiptManager = new ReceiptManager(receiptDB, categoryManager);
+  const receiptUI = new ReceiptUI({
+    receiptManager,
+    categoryManager,
+    showToast: (message) => ui.showToast(message),
+  });
+  ui.receiptUI = receiptUI;
+  window.ShoppingApp.runtime = { storage, categoryManager, shoppingManager, purchasedManager, receiptDB, receiptManager, receiptUI, ui };
+  try {
+    await receiptUI.init();
+  } catch (error) {
+    console.error("Receipt database initialization failed", error);
+    ui.showToast("レシート保存機能を初期化できませんでした");
+  }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
