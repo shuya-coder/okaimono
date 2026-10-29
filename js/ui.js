@@ -13,6 +13,8 @@ window.ShoppingApp.UI = class UI {
     this.receiptUI = null;
     this.pendingBackup = null;
     this.toastTimer = null;
+    this.keyboardTimer = null;
+    this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
     this.elements = {};
   }
 
@@ -30,9 +32,7 @@ window.ShoppingApp.UI = class UI {
       tabPanels: document.querySelectorAll(".tab-panel"),
       shoppingCountSummary: document.querySelector("#shoppingCountSummary"),
       shoppingList: document.querySelector("#shoppingList"),
-      cartCountSummary: document.querySelector("#cartCountSummary"),
-      cartList: document.querySelector("#cartList"),
-      checkoutButton: document.querySelector("#checkoutButton"),
+      addItemPanel: document.querySelector("#addItemPanel"),
       addItemForm: document.querySelector("#addItemForm"),
       itemName: document.querySelector("#itemName"),
       itemCount: document.querySelector("#itemCount"),
@@ -42,6 +42,8 @@ window.ShoppingApp.UI = class UI {
       purchasedSearch: document.querySelector("#purchasedSearch"),
       purchasedCategoryFilter: document.querySelector("#purchasedCategoryFilter"),
       purchasedSort: document.querySelector("#purchasedSort"),
+      purchaseRecordCountSummary: document.querySelector("#purchaseRecordCountSummary"),
+      purchaseRecordList: document.querySelector("#purchaseRecordList"),
       purchasedCountSummary: document.querySelector("#purchasedCountSummary"),
       purchasedList: document.querySelector("#purchasedList"),
       categoryForm: document.querySelector("#categoryForm"),
@@ -77,8 +79,6 @@ window.ShoppingApp.UI = class UI {
     });
 
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
-    this.elements.cartList.addEventListener("click", (event) => this.handleCartAction(event));
-    this.elements.checkoutButton.addEventListener("click", () => this.checkoutCart());
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
@@ -96,6 +96,7 @@ window.ShoppingApp.UI = class UI {
       this.purchasedSort = event.target.value;
       this.renderPurchasedList();
     });
+    this.elements.purchaseRecordList.addEventListener("click", (event) => this.handlePurchasedClick(event));
     this.elements.purchasedList.addEventListener("click", (event) => this.handlePurchasedClick(event));
 
     this.elements.categoryForm.addEventListener("submit", (event) => this.handleCategorySubmit(event));
@@ -114,6 +115,11 @@ window.ShoppingApp.UI = class UI {
     this.elements.cancelBackupImport.addEventListener("click", () => this.cancelJsonImport());
     this.elements.confirmBackupImport.addEventListener("click", () => this.confirmJsonImport());
     this.elements.resetStorageButton.addEventListener("click", () => this.resetStorage());
+
+    document.addEventListener("focusin", (event) => this.handleKeyboardFocus(event));
+    document.addEventListener("focusout", () => this.handleKeyboardBlur());
+    window.visualViewport?.addEventListener("resize", () => this.updateKeyboardState());
+    window.visualViewport?.addEventListener("scroll", () => this.ensureFocusedFieldVisible());
   }
 
   switchTab(tabName) {
@@ -125,6 +131,58 @@ window.ShoppingApp.UI = class UI {
     this.elements.tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tabName));
     if (tabName === "receipts" && this.receiptUI) this.receiptUI.renderAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  isKeyboardInput(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    if (element.tagName === "TEXTAREA") return true;
+    if (element.tagName !== "INPUT") return false;
+    return !["button", "checkbox", "color", "file", "hidden", "radio", "range", "reset", "submit"].includes(element.type);
+  }
+
+  handleKeyboardFocus(event) {
+    if (!this.isKeyboardInput(event.target) || window.innerWidth > 760) return;
+    document.body.classList.add("keyboard-open");
+    window.clearTimeout(this.keyboardTimer);
+    this.keyboardTimer = window.setTimeout(() => {
+      this.updateKeyboardState();
+      this.ensureFocusedFieldVisible();
+    }, 180);
+  }
+
+  handleKeyboardBlur() {
+    window.clearTimeout(this.keyboardTimer);
+    this.keyboardTimer = window.setTimeout(() => {
+      if (!this.isKeyboardInput(document.activeElement)) {
+        document.body.classList.remove("keyboard-open");
+        this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
+      }
+    }, 120);
+  }
+
+  updateKeyboardState() {
+    const viewport = window.visualViewport;
+    const activeInput = this.isKeyboardInput(document.activeElement);
+    if (!viewport || !activeInput || window.innerWidth > 760) {
+      if (!activeInput) document.body.classList.remove("keyboard-open");
+      return;
+    }
+    this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
+    const keyboardVisible = this.viewportMaxHeight - viewport.height > 80 || activeInput;
+    document.body.classList.toggle("keyboard-open", keyboardVisible);
+    if (keyboardVisible) this.ensureFocusedFieldVisible();
+  }
+
+  ensureFocusedFieldVisible() {
+    const field = document.activeElement;
+    if (!this.isKeyboardInput(field)) return;
+    const viewport = window.visualViewport;
+    const top = viewport?.offsetTop || 0;
+    const bottom = top + (viewport?.height || window.innerHeight);
+    const rect = field.getBoundingClientRect();
+    if (rect.top < top + 16 || rect.bottom > bottom - 24) {
+      field.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 
   handleAddItem(event) {
@@ -140,9 +198,12 @@ window.ShoppingApp.UI = class UI {
     this.elements.itemName.value = "";
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = selectedCategoryId;
-    this.renderListAndCart();
-    requestAnimationFrame(() => this.elements.itemName.focus({ preventScroll: true }));
-    this.showToast("商品を追加しました");
+    this.elements.addItemPanel.open = true;
+    this.renderShoppingList();
+    requestAnimationFrame(() => {
+      this.elements.itemName.focus({ preventScroll: true });
+      this.ensureFocusedFieldVisible();
+    });
   }
 
   adjustInputCount(amount) {
@@ -155,12 +216,15 @@ window.ShoppingApp.UI = class UI {
     if (!target) return;
 
     const action = target.dataset.action;
-    if (action === "move-cart") {
+    if (action === "purchase") {
       const itemId = Number(target.closest("[data-id]")?.dataset.id);
-      const item = this.shoppingManager.moveToCart(itemId);
+      target.disabled = true;
+      const item = this.shoppingManager.purchase(itemId);
       if (item) {
-        this.renderListAndCart();
-        this.showToast("カゴに入れました");
+        this.purchasedManager.recordPurchase(item);
+        this.renderShoppingList();
+        this.renderPurchasedList();
+        this.showToast(`${item.name}を購入履歴に記録しました`);
       }
       return;
     }
@@ -171,42 +235,22 @@ window.ShoppingApp.UI = class UI {
     if (action === "decrease") this.shoppingManager.changeCount(itemId, -1);
     if (action === "edit") this.openEditDialog(itemId);
     if (action === "delete" && confirm("本当に削除しますか？")) this.shoppingManager.delete(itemId);
-    this.renderListAndCart();
-  }
-
-  handleCartAction(event) {
-    const target = event.target.closest("[data-action]");
-    if (!target) return;
-    const itemId = Number(target.closest("[data-id]")?.dataset.id);
-    if (!itemId) return;
-
-    if (target.dataset.action === "return-list") {
-      this.shoppingManager.moveToList(itemId);
-      this.renderListAndCart();
-      this.showToast("リストに戻しました");
-      return;
-    }
-
-    if (target.dataset.action === "increase") this.shoppingManager.changeCount(itemId, 1);
-    if (target.dataset.action === "decrease") this.shoppingManager.changeCount(itemId, -1);
-    if (target.dataset.action === "edit") this.openEditDialog(itemId);
-    if (target.dataset.action === "delete" && confirm("本当に削除しますか？")) this.shoppingManager.delete(itemId);
-    this.renderListAndCart();
-  }
-
-  checkoutCart() {
-    const cartItems = this.shoppingManager.getCartItems();
-    if (cartItems.length === 0) return;
-    if (!confirm("カゴに入れた商品で買い物を終了しますか？")) return;
-
-    const checkedOutItems = this.shoppingManager.checkoutCart();
-    checkedOutItems.forEach((item) => this.purchasedManager.recordPurchase(item));
-    this.renderListAndCart();
-    this.renderPurchasedList();
-    this.showToast("買い物を終了し、購入履歴に記録しました");
+    this.renderShoppingList();
   }
 
   handlePurchasedClick(event) {
+    const recordRow = event.target.closest("[data-purchase-record-id]");
+    if (recordRow && event.target.closest("[data-action='rebuy-record']")) {
+      const record = this.purchasedManager
+        .getPurchaseRecords()
+        .find((item) => item.id === recordRow.dataset.purchaseRecordId);
+      if (!record) return;
+      this.shoppingManager.add({ name: record.name, count: 1, categoryId: record.categoryId });
+      this.renderShoppingList();
+      this.showToast(`${record.name}をリストに追加しました`);
+      return;
+    }
+
     const row = event.target.closest("[data-purchased-id]");
     if (!row) return;
     const purchasedItem = this.purchasedManager.getAll().find((item) => item.id === Number(row.dataset.purchasedId));
@@ -214,7 +258,7 @@ window.ShoppingApp.UI = class UI {
 
     if (event.target.closest("[data-action='add-purchased-to-list']")) {
       this.shoppingManager.add({ name: purchasedItem.name, count: 1, categoryId: purchasedItem.categoryId });
-      this.renderListAndCart();
+      this.renderShoppingList();
       this.showToast(`${purchasedItem.name}をリストに追加しました`);
       return;
     }
@@ -289,20 +333,15 @@ window.ShoppingApp.UI = class UI {
       categoryId: this.elements.editCategory.value,
     });
     this.elements.editDialog.close();
-    this.renderListAndCart();
+    this.renderShoppingList();
     this.showToast("保存しました");
   }
 
   renderAll() {
     this.renderCategoryOptions();
-    this.renderListAndCart();
+    this.renderShoppingList();
     this.renderPurchasedList();
     this.renderCategories();
-  }
-
-  renderListAndCart() {
-    this.renderShoppingList();
-    this.renderCartList();
   }
 
   renderCategoryOptions() {
@@ -344,37 +383,13 @@ window.ShoppingApp.UI = class UI {
     this.elements.shoppingList.innerHTML = items.map((item) => this.createListItemHtml(item)).join("");
   }
 
-  renderCartList() {
-    const items = this.shoppingManager.getCartItems();
-    this.elements.cartCountSummary.textContent = `${items.length}件`;
-    this.elements.checkoutButton.disabled = items.length === 0;
-    if (items.length === 0) {
-      this.elements.cartList.innerHTML = `<p class="empty-message">カートは空です。</p>`;
-      return;
-    }
-    this.elements.cartList.innerHTML = items.map((item) => this.createCartItemHtml(item)).join("");
-  }
-
   createListItemHtml(item) {
     return this.createItemHtml(item, {
       leadingHtml: `
         <div class="cart-icon" aria-hidden="true">📝</div>
       `,
       actionsHtml: `
-        <button class="small-button move-cart-button" type="button" data-action="move-cart" aria-label="カゴに入れた">カゴへ</button>
-        <button class="small-button" type="button" data-action="edit">編集</button>
-        <button class="small-button" type="button" data-action="increase">＋</button>
-        <button class="small-button" type="button" data-action="decrease">−</button>
-        <button class="small-button danger" type="button" data-action="delete">削除</button>
-      `,
-    });
-  }
-
-  createCartItemHtml(item) {
-    return this.createItemHtml(item, {
-      leadingHtml: `<div class="cart-icon" aria-hidden="true">🛒</div>`,
-      actionsHtml: `
-        <button class="small-button return-list-button" type="button" data-action="return-list" aria-label="リストに戻す">リストへ</button>
+        <button class="small-button purchase-button" type="button" data-action="purchase" aria-label="${this.escapeHtml(item.name)}を購入済みにする">購入</button>
         <button class="small-button" type="button" data-action="edit">編集</button>
         <button class="small-button" type="button" data-action="increase">＋</button>
         <button class="small-button" type="button" data-action="decrease">−</button>
@@ -401,6 +416,13 @@ window.ShoppingApp.UI = class UI {
   }
 
   renderPurchasedList() {
+    const records = this.purchasedManager
+      .getPurchaseRecords()
+      .filter((record) => record.name.toLocaleLowerCase("ja-JP").includes(this.purchasedSearch))
+      .filter((record) => this.purchasedCategoryId === "all" || String(record.categoryId) === this.purchasedCategoryId);
+    this.elements.purchaseRecordCountSummary.textContent = `${records.length}件`;
+    this.renderPurchaseRecordGroups(records);
+
     const items = this.purchasedManager
       .getAll()
       .filter((item) => item.name.toLocaleLowerCase("ja-JP").includes(this.purchasedSearch))
@@ -417,14 +439,65 @@ window.ShoppingApp.UI = class UI {
     this.elements.purchasedList.innerHTML = items.map((item) => this.createPurchasedItemHtml(item)).join("");
   }
 
+  renderPurchaseRecordGroups(records) {
+    if (records.length === 0) {
+      const message = this.purchasedSearch || this.purchasedCategoryId !== "all"
+        ? "条件に合う日付付き購入記録はありません。"
+        : "次に「購入」を押した商品から、日付別に記録されます。";
+      this.elements.purchaseRecordList.innerHTML = `<p class="empty-message">${message}</p>`;
+      return;
+    }
+
+    const groups = new Map();
+    records.forEach((record) => {
+      const dateKey = this.localDateKey(record.purchasedAt);
+      if (!groups.has(dateKey)) groups.set(dateKey, []);
+      groups.get(dateKey).push(record);
+    });
+    this.elements.purchaseRecordList.innerHTML = [...groups.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([dateKey, items], index) => this.createPurchaseDateGroup(dateKey, items, index === 0))
+      .join("");
+  }
+
+  createPurchaseDateGroup(dateKey, records, open) {
+    const totalCount = records.reduce((sum, record) => sum + record.count, 0);
+    return `
+      <details class="history-day" ${open ? "open" : ""}>
+        <summary>
+          <span><strong>${this.formatDateHeader(dateKey)}</strong><small>${records.length}商品・合計${totalCount}点</small></span>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="history-day-body">
+          ${records.map((record) => this.createPurchaseRecordHtml(record)).join("")}
+        </div>
+      </details>`;
+  }
+
+  createPurchaseRecordHtml(record) {
+    const category = this.categoryManager.findById(record.categoryId) || this.categoryManager.getFallback();
+    return `
+      <article class="purchase-record" data-purchase-record-id="${this.escapeHtml(record.id)}" style="--category-color:${this.escapeHtml(category.color)}">
+        <div class="item-main">
+          <p class="item-name">${this.escapeHtml(record.name)} ×${record.count}</p>
+          <div class="item-meta">
+            <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
+            <span>${this.formatTime(record.purchasedAt)}</span>
+          </div>
+        </div>
+        <button class="purchased-add-button" type="button" data-action="rebuy-record">もう一度買う</button>
+      </article>`;
+  }
+
   sortPurchasedItems(items) {
-    const newestFirst = (a, b) => new Date(b.lastPurchasedAt) - new Date(a.lastPurchasedAt);
+    const dateValue = (value) => value && !Number.isNaN(new Date(value).getTime()) ? new Date(value).getTime() : 0;
+    const newestFirst = (a, b) => dateValue(b.lastPurchasedAt) - dateValue(a.lastPurchasedAt);
     if (this.purchasedSort === "name") {
       items.sort((a, b) => a.name.localeCompare(b.name, "ja", { sensitivity: "base" }));
       return;
     }
     if (this.purchasedSort === "oldest") {
-      items.sort((a, b) => new Date(a.lastPurchasedAt) - new Date(b.lastPurchasedAt));
+      items.sort((a, b) => dateValue(a.lastPurchasedAt) - dateValue(b.lastPurchasedAt));
       return;
     }
     if (this.purchasedSort === "frequent") {
@@ -442,11 +515,12 @@ window.ShoppingApp.UI = class UI {
           <p class="item-name">${this.escapeHtml(item.name)}</p>
           <div class="item-meta">
             <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-            <span>最終購入 ${this.formatPurchasedDate(item.lastPurchasedAt)}</span>
+            <span>購入 ${item.purchaseCount}回</span>
+            <span>${item.lastPurchasedAt ? `最終購入 ${this.formatPurchasedDate(item.lastPurchasedAt)}` : "購入日不明"}</span>
           </div>
         </div>
         <div class="purchased-actions">
-          <button class="purchased-add-button" type="button" data-action="add-purchased-to-list">＋ リストへ</button>
+          <button class="purchased-add-button" type="button" data-action="add-purchased-to-list">もう一度買う</button>
           <button class="purchased-delete-button" type="button" data-action="delete-purchased" aria-label="${this.escapeHtml(item.name)}を削除">削除</button>
         </div>
       </article>
@@ -454,6 +528,7 @@ window.ShoppingApp.UI = class UI {
   }
 
   formatPurchasedDate(value) {
+    if (!value || Number.isNaN(new Date(value).getTime())) return "日付不明";
     return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "short", day: "numeric" }).format(
       new Date(value)
     );
@@ -493,6 +568,7 @@ window.ShoppingApp.UI = class UI {
       ...this.shoppingManager.getAll().map((item) => ["shopping", item.id, item.name, item.count, item.categoryId, item.status, item.createdAt, "", ""]),
       ...this.categoryManager.getAll().map((category) => ["category", category.id, category.name, "", "", "", "", category.color, ""]),
       ...this.purchasedManager.getAll().map((item) => ["purchased", item.id, item.name, item.purchaseCount, item.categoryId, "", item.lastPurchasedAt, "", ""]),
+      ...this.purchasedManager.getPurchaseRecords().map((item) => ["purchaseRecord", item.id, item.name, item.count, item.categoryId, "", item.purchasedAt, "", "purchased"]),
     ];
     const csv = rows.map((row) => row.map((value) => this.escapeCsv(value)).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
@@ -511,7 +587,7 @@ window.ShoppingApp.UI = class UI {
     const text = await file.text();
     const rows = this.parseCsv(text.replace(/^\uFEFF/, ""));
     const [, ...dataRows] = rows;
-    const imported = { shoppingItems: [], categories: [], purchasedItems: [] };
+    const imported = { shoppingItems: [], categories: [], purchasedItems: [], purchaseRecords: [] };
     dataRows.forEach(([type, id, name, count, categoryId, status, date, color, action]) => {
       if (!type || !name) return;
       const numericId = Number(id) || Date.now() + Math.floor(Math.random() * 10000);
@@ -532,7 +608,17 @@ window.ShoppingApp.UI = class UI {
           name,
           purchaseCount: type === "purchased" ? Math.max(1, Number(count) || 1) : 1,
           categoryId: Number(categoryId),
-          lastPurchasedAt: date || new Date().toISOString(),
+          lastPurchasedAt: date || null,
+        });
+      }
+      if (type === "purchaseRecord" && date) {
+        imported.purchaseRecords.push({
+          id: id || `${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          sourceItemId: null,
+          name,
+          count: Math.max(1, Number(count) || 1),
+          categoryId: Number(categoryId),
+          purchasedAt: date,
         });
       }
     });
@@ -544,6 +630,7 @@ window.ShoppingApp.UI = class UI {
     this.storage.set("categories", imported.categories);
     this.storage.set("shoppingItems", imported.shoppingItems);
     this.storage.set("purchasedItems", this.purchasedManager.mergeDuplicates(imported.purchasedItems));
+    this.storage.set("purchaseRecords", this.purchasedManager.normalizeRecords(imported.purchaseRecords));
     event.target.value = "";
     this.renderAll();
     this.showToast("CSVを読み込みました");
@@ -559,7 +646,7 @@ window.ShoppingApp.UI = class UI {
     }
     const backup = {
       format: "okaimono-backup",
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       localStorage: localData,
       receiptData: this.receiptUI ? await this.receiptUI.exportData() : { receipts: [], mappings: [] },
@@ -577,9 +664,10 @@ window.ShoppingApp.UI = class UI {
       const local = backup.localStorage;
       const shopping = local[`${this.storage.namespace}:shoppingItems`] || [];
       const purchased = local[`${this.storage.namespace}:purchasedItems`] || [];
+      const purchaseRecords = local[`${this.storage.namespace}:purchaseRecords`] || [];
       const categories = local[`${this.storage.namespace}:categories`] || [];
       const receipts = backup.receiptData.receipts || [];
-      this.elements.backupPreview.innerHTML = `<dl class="backup-summary"><dt>作成日時</dt><dd>${this.escapeHtml(this.formatDateTime(backup.exportedAt))}</dd><dt>買い物・カゴ</dt><dd>${shopping.length}件</dd><dt>購入履歴</dt><dd>${purchased.length}件</dd><dt>カテゴリー</dt><dd>${categories.length}件</dd><dt>レシート</dt><dd>${receipts.length}件</dd><dt>商品名の学習</dt><dd>${(backup.receiptData.mappings || []).length}件</dd></dl>`;
+      this.elements.backupPreview.innerHTML = `<dl class="backup-summary"><dt>作成日時</dt><dd>${this.escapeHtml(this.formatDateTime(backup.exportedAt))}</dd><dt>買い物リスト</dt><dd>${shopping.length}件</dd><dt>日付付き購入記録</dt><dd>${purchaseRecords.length}件</dd><dt>購入商品</dt><dd>${purchased.length}件</dd><dt>カテゴリー</dt><dd>${categories.length}件</dd><dt>レシート</dt><dd>${receipts.length}件</dd><dt>商品名の学習</dt><dd>${(backup.receiptData.mappings || []).length}件</dd></dl>`;
       this.pendingBackup = backup;
       this.elements.backupPreviewDialog.showModal();
     } catch (error) {
@@ -689,6 +777,16 @@ window.ShoppingApp.UI = class UI {
 
   formatTime(value) {
     return new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  }
+
+  localDateKey(value) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(value));
+    const get = (type) => parts.find((part) => part.type === type)?.value;
+    return `${get("year")}-${get("month")}-${get("day")}`;
   }
 
   formatDateHeader(dateKey) {

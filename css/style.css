@@ -638,13 +638,13 @@ textarea {
   margin-top: 2px;
 }
 
-.move-cart-button,
+.purchase-button,
 .return-list-button {
   min-height: 44px;
   font-size: 1rem;
 }
 
-.move-cart-button {
+.purchase-button {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
@@ -1013,7 +1013,7 @@ body.dark-mode .warning-message { background: #3d3316; color: #ffe89a; }
     gap: 7px;
   }
 
-  .item-actions .move-cart-button,
+  .item-actions .purchase-button,
   .item-actions .return-list-button {
     grid-column: span 2;
   }
@@ -1240,7 +1240,7 @@ textarea:focus {
 .purchased-delete-button { border-radius: 14px; }
 
 .primary-button,
-.move-cart-button,
+.purchase-button,
 .purchased-add-button {
   border-color: color-mix(in srgb, var(--primary) 88%, #000);
   background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 92%, #fff), var(--primary));
@@ -1257,7 +1257,7 @@ textarea:focus {
   background: color-mix(in srgb, var(--surface-soft) 78%, var(--surface));
 }
 
-.small-button.move-cart-button {
+.small-button.purchase-button {
   border-color: color-mix(in srgb, var(--primary) 88%, #000);
   background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 92%, #fff), var(--primary));
   color: #fff;
@@ -1341,4 +1341,202 @@ dialog::backdrop { background: rgba(12, 24, 19, .48); backdrop-filter: blur(5px)
   .tab-nav { width: calc(100% - 16px); border-radius: 20px; }
   .tab-button { border-radius: 14px; }
   .monthly-spend-card { border-radius: 19px; }
+}
+
+/* Direct purchase history and iPhone software-keyboard behavior. */
+.tab-nav {
+  transition: transform .2s ease, opacity .16s ease, box-shadow .18s ease;
+}
+
+body.keyboard-open {
+  scroll-padding-bottom: 24px;
+}
+
+body.keyboard-open .tab-nav,
+body.keyboard-open .toast {
+  transform: translate(-50%, calc(100% + 48px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.keyboard-open .app-shell {
+  padding-bottom: 28px;
+}
+
+.history-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 2px 10px;
+}
+
+.history-section-heading .eyebrow {
+  margin-bottom: 0;
+  color: var(--primary);
+  font-size: .75rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+}
+
+.history-section-heading h2 {
+  font-size: 1.1rem;
+}
+
+.cumulative-heading {
+  margin-top: 24px;
+}
+
+.purchase-record-list,
+.history-day-body {
+  display: grid;
+  gap: 9px;
+}
+
+.history-day {
+  overflow: hidden;
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--surface) 97%, var(--surface-soft));
+  box-shadow: var(--shadow);
+}
+
+.history-day > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 11px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.history-day > summary::-webkit-details-marker,
+.receipt-history-entry > summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-day > summary strong,
+.history-day > summary small {
+  display: block;
+}
+
+.history-day > summary small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.history-day[open] > summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.history-day[open] > summary .chevron {
+  transform: rotate(180deg);
+}
+
+.history-day-body {
+  padding: 10px;
+}
+
+.purchase-record {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  overflow: hidden;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.purchase-record::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--category-color, var(--primary));
+}
+
+.purchase-record .purchased-add-button {
+  min-height: 42px;
+  font-size: .84rem;
+}
+
+.receipt-day .history-day-body {
+  gap: 8px;
+}
+
+.receipt-history-entry {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.receipt-history-entry > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.receipt-history-entry > summary span > strong,
+.receipt-history-entry > summary small {
+  display: block;
+}
+
+.receipt-history-entry > summary small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.receipt-history-entry[open] > summary {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-soft) 60%, var(--surface));
+}
+
+.receipt-history-body {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.receipt-history-items {
+  display: grid;
+  gap: 5px;
+}
+
+.receipt-history-items > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  font-size: .86rem;
+}
+
+@media (max-width: 600px) {
+  body.keyboard-open .app-shell {
+    padding-bottom: 24px;
+  }
+
+  .purchase-record {
+    grid-template-columns: minmax(0, 1fr) 112px;
+  }
+
+  .purchase-record .purchased-add-button {
+    padding-inline: 7px;
+  }
 }

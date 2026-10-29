@@ -12,20 +12,36 @@
   try {
     localStorage.clear();
     localStorage.setItem("shoppingApp:categories", JSON.stringify([{id:10,name:"食料品",color:"#4CAF50"},{id:20,name:"日用品",color:"#2196F3"}]));
-    localStorage.setItem("shoppingApp:shoppingItems", JSON.stringify([{id:1,name:"残す商品",count:2,categoryId:10,status:"list",createdAt:"2026-10-01T00:00:00Z"},{id:2,name:"カゴ商品",count:1,categoryId:20,status:"cart",createdAt:"2026-10-02T00:00:00Z"}]));
-    localStorage.setItem("shoppingApp:purchasedItems", JSON.stringify([{id:3,name:"過去商品",categoryId:10,lastPurchasedAt:"2026-09-01T00:00:00Z",purchaseCount:2}]));
+    localStorage.setItem("shoppingApp:shoppingItems", JSON.stringify([{id:1,name:"残す商品",count:2,categoryId:10,status:"list",createdAt:"2026-10-01T00:00:00Z"},{id:2,name:"カゴ商品",count:1,categoryId:20,status:"cart",createdAt:"2026-10-02T00:00:00Z"},{id:5,name:"残す商品",count:3,categoryId:10,status:"cart",createdAt:"2026-10-03T00:00:00Z"}]));
+    localStorage.setItem("shoppingApp:purchasedItems", JSON.stringify([{id:3,name:"過去商品",categoryId:10,lastPurchasedAt:"2026-09-01T00:00:00Z",purchaseCount:2},{id:4,name:"日付不明商品",categoryId:20,purchaseCount:4}]));
     await new Promise((resolve, reject) => { const request = indexedDB.deleteDatabase("shoppingAppReceipts"); request.onsuccess = resolve; request.onerror = reject; request.onblocked = resolve; });
     const frame = document.createElement("iframe"); frame.src = "/?qa=1"; document.body.append(frame); await new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
     const win = frame.contentWindow; const doc = frame.contentDocument;
     const runtime = await waitFor(() => win.ShoppingApp?.runtime);
     await waitFor(() => runtime.receiptUI.receipts);
-    report("既存LocalStorageを読込", doc.querySelector("#shoppingList").textContent.includes("残す商品") && doc.querySelector("#cartList").textContent.includes("カゴ商品") && doc.querySelector("#purchasedList").textContent.includes("過去商品"));
+    report("既存カートを買い物リストへ安全に移行", doc.querySelector("#shoppingList").textContent.includes("残す商品") && doc.querySelector("#shoppingList").textContent.includes("カゴ商品") && !doc.querySelector("#basketPanel") && runtime.shoppingManager.getCartItems().length === 0 && runtime.shoppingManager.getListItems().find((item) => item.name === "残す商品")?.count === 5);
+    report("既存の累計購入商品を保持", doc.querySelector("#purchasedList").textContent.includes("過去商品") && runtime.purchasedManager.getAll().find((item) => item.name === "過去商品")?.purchaseCount === 2);
+    report("購入日不明データへ架空の日付を付けない", runtime.purchasedManager.getAll().find((item) => item.name === "日付不明商品")?.lastPurchasedAt === null && doc.querySelector("#purchasedList").textContent.includes("購入日不明"));
     report("4タブ構成", [...doc.querySelectorAll(".tab-button span")].map((node) => node.textContent).join(",") === "買い物,レシート,購入履歴,設定");
-    win.confirm = () => true;
-    doc.querySelector("#checkoutButton").click();
-    await waitFor(() => runtime.shoppingManager.getCartItems().length === 0);
-    report("買い物終了でカゴだけ空になる", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && runtime.shoppingManager.getCartItems().length === 0);
-    report("買い物終了を購入履歴へ記録", runtime.purchasedManager.getAll().some((item) => item.name === "カゴ商品"));
+    doc.querySelector("#addItemPanel").open = true;
+    doc.querySelector("#itemName").value = "連続追加商品";
+    doc.querySelector("#itemCount").value = "3";
+    doc.querySelector("#itemCategory").value = "20";
+    doc.querySelector("#addItemForm").requestSubmit();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    report("商品を連続追加できる状態を維持", doc.querySelector("#addItemPanel").open && doc.querySelector("#itemName").value === "" && doc.querySelector("#itemCount").value === "1" && doc.querySelector("#itemCategory").value === "20" && doc.activeElement === doc.querySelector("#itemName") && !doc.querySelector("#toast").classList.contains("visible"));
+    report("キーボード中は下部タブを隠す", doc.body.classList.contains("keyboard-open"));
+    doc.querySelector("#itemName").blur();
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    report("キーボード終了後に下部タブを戻す", !doc.body.classList.contains("keyboard-open"));
+
+    const cartItemRow = [...doc.querySelectorAll("#shoppingList [data-id]")].find((row) => row.textContent.includes("カゴ商品"));
+    cartItemRow.querySelector("[data-action='purchase']").click();
+    await waitFor(() => runtime.purchasedManager.getPurchaseRecords().length === 1);
+    const purchaseRecord = runtime.purchasedManager.getPurchaseRecords()[0];
+    report("購入でリストから除外して日付付き記録を保存", !runtime.shoppingManager.getListItems().some((item) => item.name === "カゴ商品") && purchaseRecord.name === "カゴ商品" && purchaseRecord.count === 1 && Boolean(purchaseRecord.purchasedAt));
+    report("購入回数を一度だけ加算", runtime.purchasedManager.getAll().find((item) => item.name === "カゴ商品")?.purchaseCount === 1);
+    report("購入履歴を日付別の折りたたみで表示", doc.querySelectorAll("#purchaseRecordList .history-day").length === 1 && doc.querySelector("#purchaseRecordList").textContent.includes("カゴ商品") && doc.querySelector("#purchaseRecordList [data-action='rebuy-record']"));
 
     doc.querySelector("#manualReceiptButton").click();
     doc.querySelector("#receiptStore").value = "テスト店";
@@ -37,8 +53,10 @@
     await waitFor(async () => (await runtime.receiptManager.getAll()).length === 1);
     const stored = (await runtime.receiptManager.getAll())[0];
     report("レシートをIndexedDBへ保存", stored.storeName === "テスト店" && stored.total === 1000 && !Object.keys(stored).some((key) => /image|photo|blob/i.test(key)));
+    report("レシート登録で購入回数を二重計上しない", !runtime.purchasedManager.getAll().some((item) => item.name === "牛乳") && runtime.purchasedManager.getPurchaseRecords().length === 1);
     report("画像を永続保存しない", !JSON.stringify(stored).includes("data:image"));
     report("月次集計", doc.querySelector("#monthlySpend").textContent.includes("1,000"));
+    report("レシート履歴を日付別に折りたたみ表示", doc.querySelectorAll("#receiptList .receipt-day").length === 1 && doc.querySelector("#receiptList").textContent.includes("テスト店") && doc.querySelector("#receiptList").textContent.includes("1,000"));
     runtime.receiptUI.openEditor(stored); doc.querySelector("#receiptTotal").value = "1100"; runtime.receiptUI.currentItems[0].amount = 1100; doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
     await waitFor(async () => (await runtime.receiptManager.getAll())[0]?.total === 1100);
     report("レシート編集", (await runtime.receiptManager.getAll())[0].total === 1100);
@@ -50,12 +68,12 @@
     await runtime.receiptManager.db.deleteReceipt("duplicate-test");
 
     let backupText = ""; runtime.ui.downloadBlob = (content) => { backupText = content; }; await runtime.ui.exportJson(); const backup = JSON.parse(backupText);
-    report("JSONバックアップ", backup.format === "okaimono-backup" && backup.receiptData.receipts.length === 1 && backup.localStorage["shoppingApp:shoppingItems"].length === 1);
+    report("JSONバックアップ", backup.format === "okaimono-backup" && backup.receiptData.receipts.length === 1 && backup.localStorage["shoppingApp:shoppingItems"].length === 2 && backup.localStorage["shoppingApp:purchaseRecords"].length === 1);
     runtime.storage.set("shoppingItems", []); runtime.ui.pendingBackup = backup; await runtime.ui.confirmJsonImport();
     report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v3.2.0");
+    const cache = await win.caches.open("shopping-app-v3.3.0");
     const [jpn, wasm, worker] = await Promise.all([cache.match("/vendor/tessdata/jpn.traineddata.gz"), cache.match("/vendor/tesseract-core/tesseract-core-lstm.wasm"), cache.match("/vendor/tesseract/worker.min.js")]);
     report("OCR資産をオフラインキャッシュ", Boolean(jpn && wasm && worker));
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);

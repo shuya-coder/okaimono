@@ -21,21 +21,35 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
         categories.find((current) => current.name === item.category) ||
         fallback;
 
-      const legacyChecked = item.checked === true || item.checked === "true";
-      const status = item.status === "cart" || (!item.status && legacyChecked) ? "cart" : "list";
-
       return {
         id: Number(item.id) || this.createId(),
         name: item.name,
         count: Math.max(1, Number(item.count) || 1),
         categoryId: category.id,
-        status,
-        checked: status === "cart",
+        status: "list",
+        checked: false,
         createdAt: item.createdAt || new Date().toISOString(),
       };
     });
-    this.save(normalized);
-    return normalized;
+    const merged = this.mergeDuplicates(normalized);
+    this.save(merged);
+    return merged;
+  }
+
+  mergeDuplicates(items) {
+    const merged = new Map();
+    items.forEach((item) => {
+      const key = String(item.name || "").trim().toLocaleLowerCase("ja-JP");
+      if (!key) return;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, { ...item, name: String(item.name).trim() });
+        return;
+      }
+      existing.count += item.count;
+      if (new Date(item.createdAt) > new Date(existing.createdAt)) existing.createdAt = item.createdAt;
+    });
+    return [...merged.values()];
   }
 
   save(items) {
@@ -47,7 +61,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
   }
 
   getCartItems() {
-    return this.getByStatus("cart");
+    return [];
   }
 
   getByStatus(status) {
@@ -125,7 +139,7 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
   }
 
   moveToCart(id) {
-    return this.setStatus(id, "cart");
+    return this.moveToList(id);
   }
 
   moveToList(id) {
@@ -144,13 +158,19 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
   }
 
   setChecked(id, checked) {
-    return checked ? this.moveToCart(id) : this.moveToList(id);
+    return this.moveToList(id);
   }
 
   checkoutCart() {
-    const cartItems = this.getCartItems();
-    this.save(this.getAll().filter((item) => item.status !== "cart"));
-    return cartItems;
+    return [];
+  }
+
+  purchase(id) {
+    const items = this.getAll();
+    const purchasedItem = items.find((item) => item.id === id) || null;
+    if (!purchasedItem) return null;
+    this.save(items.filter((item) => item.id !== id));
+    return purchasedItem;
   }
 
   delete(id) {

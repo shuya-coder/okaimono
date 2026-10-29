@@ -234,7 +234,44 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       return searchable.includes(this.search) && (this.monthFilter === "all" || receipt.purchasedAt.startsWith(this.monthFilter));
     });
     if (!filtered.length) { this.elements.receiptList.innerHTML = `<p class="empty-message">レシート記録はありません。</p>`; return; }
-    this.elements.receiptList.innerHTML = filtered.map((receipt) => `<article class="receipt-record" data-receipt-id="${receipt.id}"><div><p class="item-name">${this.escapeHtml(receipt.storeName)}</p><p class="item-meta">${this.formatDate(receipt.purchasedAt)}・${receipt.items.length}商品${receipt.needsReview ? "・要確認" : ""}</p></div><strong>¥${this.formatMoney(receipt.total)}</strong><div class="receipt-record-actions"><button class="small-button" type="button" data-action="edit-receipt">編集</button><button class="small-button danger" type="button" data-action="delete-receipt">削除</button></div></article>`).join("");
+    const groups = new Map();
+    filtered.forEach((receipt) => {
+      const dateKey = this.localDateKey(receipt.purchasedAt);
+      if (!groups.has(dateKey)) groups.set(dateKey, []);
+      groups.get(dateKey).push(receipt);
+    });
+    this.elements.receiptList.innerHTML = [...groups.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([dateKey, receipts], index) => {
+        const dailyTotal = receipts.reduce((sum, receipt) => sum + receipt.total, 0);
+        return `
+          <details class="history-day receipt-day" ${index === 0 ? "open" : ""}>
+            <summary>
+              <span><strong>${this.formatDateHeader(dateKey)}</strong><small>${receipts.length}件・合計 ¥${this.formatMoney(dailyTotal)}</small></span>
+              <span class="chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="history-day-body">
+              ${receipts.map((receipt) => this.createReceiptHistoryHtml(receipt)).join("")}
+            </div>
+          </details>`;
+      })
+      .join("");
+  }
+
+  createReceiptHistoryHtml(receipt) {
+    return `
+      <details class="receipt-history-entry" data-receipt-id="${receipt.id}">
+        <summary>
+          <span><strong>${this.escapeHtml(receipt.storeName)}</strong><small>${this.formatTime(receipt.purchasedAt)}・${receipt.items.length}商品${receipt.needsReview ? "・要確認" : ""}</small></span>
+          <strong>¥${this.formatMoney(receipt.total)}</strong>
+        </summary>
+        <div class="receipt-history-body">
+          <div class="receipt-history-items">
+            ${receipt.items.map((item) => `<div><span>${this.escapeHtml(item.name)} ×${item.quantity}</span><strong>¥${this.formatMoney(item.amount)}</strong></div>`).join("") || `<p class="empty-inline">商品明細なし</p>`}
+          </div>
+          <div class="receipt-record-actions"><button class="small-button" type="button" data-action="edit-receipt">編集</button><button class="small-button danger" type="button" data-action="delete-receipt">削除</button></div>
+        </div>
+      </details>`;
   }
 
   renderProductOptions() {
@@ -270,6 +307,14 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     return local.toISOString().slice(0, 16);
   }
 
+  localDateKey(value) {
+    const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+    const get = (type) => parts.find((part) => part.type === type)?.value;
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }
+
+  formatDateHeader(dateKey) { return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(`${dateKey}T00:00:00`)); }
+  formatTime(value) { return new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
   formatDate(value) { return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value)); }
   formatMoney(value) { return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(Number(value) || 0); }
   escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
