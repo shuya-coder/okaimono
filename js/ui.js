@@ -10,9 +10,11 @@ window.ShoppingApp.UI = class UI {
     this.purchasedSearch = "";
     this.purchasedCategoryId = "all";
     this.purchasedSort = "recent";
-    this.historyView = "receipts";
+    const savedHistoryView = this.storage.get("historyView", "recent");
+    this.historyView = ["receipts", "recent", "products"].includes(savedHistoryView) ? savedHistoryView : "recent";
     this.receiptUI = null;
     this.pendingBackup = null;
+    this.pendingPurchaseUndo = null;
     this.toastTimer = null;
     this.keyboardTimer = null;
     this.isComposingItemName = false;
@@ -30,6 +32,8 @@ window.ShoppingApp.UI = class UI {
     this.applyTheme(this.storage.get("darkMode", false));
     this.elements.appVersion.textContent = this.version;
     this.renderAll();
+    this.elements.addItemPanel.open = this.shoppingManager.getListItems().length === 0;
+    this.switchHistoryView(this.historyView, { persist: false });
   }
 
   cacheElements() {
@@ -79,6 +83,8 @@ window.ShoppingApp.UI = class UI {
       editCategory: document.querySelector("#editCategory"),
       cancelEditButton: document.querySelector("#cancelEditButton"),
       toast: document.querySelector("#toast"),
+      toastMessage: document.querySelector("#toastMessage"),
+      toastUndoButton: document.querySelector("#toastUndoButton"),
     };
   }
 
@@ -93,6 +99,9 @@ window.ShoppingApp.UI = class UI {
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
+    this.elements.addItemPanel.addEventListener("toggle", () => {
+      if (this.isComposingItemName && !this.elements.addItemPanel.open) this.elements.addItemPanel.open = true;
+    });
     this.elements.itemName.addEventListener("compositionstart", () => this.handleItemCompositionStart());
     this.elements.itemName.addEventListener("compositionend", () => this.handleItemCompositionEnd());
     this.elements.addItemButton.addEventListener("touchstart", (event) => {
@@ -124,6 +133,7 @@ window.ShoppingApp.UI = class UI {
 
     this.elements.editForm.addEventListener("submit", (event) => this.handleEditSubmit(event));
     this.elements.cancelEditButton.addEventListener("click", () => this.elements.editDialog.close());
+    this.elements.toastUndoButton.addEventListener("click", () => this.undoLastPurchase());
 
     this.elements.darkModeButton.addEventListener("click", () => this.toggleDarkMode());
     this.elements.themeQuickToggle.addEventListener("click", () => this.toggleDarkMode());
@@ -162,8 +172,10 @@ window.ShoppingApp.UI = class UI {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  switchHistoryView(viewName) {
+  switchHistoryView(viewName, { persist = true } = {}) {
+    if (!["receipts", "recent", "products"].includes(viewName)) viewName = "recent";
     this.historyView = viewName;
+    if (persist) this.storage.set("historyView", viewName);
     this.elements.historyViewButtons.forEach((button) => {
       const isActive = button.dataset.historyView === viewName;
       button.classList.toggle("active", isActive);
@@ -277,6 +289,7 @@ window.ShoppingApp.UI = class UI {
 
   handleItemCompositionStart() {
     this.isComposingItemName = true;
+    this.elements.addItemPanel.open = true;
     window.clearTimeout(this.keyboardTimer);
   }
 
@@ -297,6 +310,7 @@ window.ShoppingApp.UI = class UI {
     this.elements.itemName.value = "";
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = selectedCategoryId;
+    this.elements.addItemPanel.open = true;
 
     const restoreInput = () => {
       const active = document.activeElement;
@@ -329,10 +343,19 @@ window.ShoppingApp.UI = class UI {
       target.disabled = true;
       const item = this.shoppingManager.purchase(itemId);
       if (item) {
-        this.purchasedManager.recordPurchase(item);
+        const key = item.name.toLocaleLowerCase("ja-JP");
+        const previousPurchasedItem = this.purchasedManager
+          .getAll()
+          .find((current) => current.name.toLocaleLowerCase("ja-JP") === key);
+        const record = this.purchasedManager.recordPurchase(item);
+        this.pendingPurchaseUndo = record ? {
+          item: { ...item },
+          recordId: record.id,
+          previousPurchasedItem: previousPurchasedItem ? { ...previousPurchasedItem } : null,
+        } : null;
         this.renderShoppingList();
         this.renderPurchasedList();
-        this.showToast(`${item.name}を購入履歴に記録しました`);
+        this.showToast(`${item.name}を購入履歴に記録しました`, { undo: Boolean(this.pendingPurchaseUndo), duration: 6000 });
       }
       return;
     }
@@ -818,11 +841,32 @@ window.ShoppingApp.UI = class UI {
     this.showToast("初期化しました");
   }
 
-  showToast(message) {
+  undoLastPurchase() {
+    const pending = this.pendingPurchaseUndo;
+    if (!pending) return;
+    this.pendingPurchaseUndo = null;
+    const undoneRecord = this.purchasedManager.undoPurchase(pending.recordId, pending.previousPurchasedItem);
+    if (!undoneRecord) {
+      this.showToast("購入を元に戻せませんでした");
+      return;
+    }
+    this.shoppingManager.restorePurchased(pending.item);
+    this.renderShoppingList();
+    this.renderPurchasedList();
+    this.showToast(`${pending.item.name}の購入を元に戻しました`);
+  }
+
+  showToast(message, { undo = false, duration = 1600 } = {}) {
     window.clearTimeout(this.toastTimer);
-    this.elements.toast.textContent = message;
+    if (!undo) this.pendingPurchaseUndo = null;
+    this.elements.toastMessage.textContent = message;
+    this.elements.toastUndoButton.hidden = !undo;
     this.elements.toast.classList.add("visible");
-    this.toastTimer = window.setTimeout(() => this.elements.toast.classList.remove("visible"), 1600);
+    this.toastTimer = window.setTimeout(() => {
+      this.elements.toast.classList.remove("visible");
+      this.elements.toastUndoButton.hidden = true;
+      if (undo) this.pendingPurchaseUndo = null;
+    }, duration);
   }
 
   parseCsv(text) {

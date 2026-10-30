@@ -9,24 +9,24 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.2.0">
+  <link rel="manifest" href="manifest.webmanifest?v=4.3.0">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=4.2.0">
+  <link rel="stylesheet" href="css/style.css?v=4.3.0">
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header"><div><p class="eyebrow">買い物中でもすばやく操作</p><h1>買い物リスト</h1></div><button id="themeQuickToggle" class="icon-button" type="button" aria-label="ダークモード切替">🌙</button></header>
     <main id="mainContent">
       <section class="tab-panel active" data-panel="shopping" aria-labelledby="shoppingTabButton">
-        <section class="collapsible-card add-card" id="addItemPanel" aria-labelledby="addItemPanelTitle">
-          <div class="add-card-header"><span><strong id="addItemPanelTitle">＋ 商品を追加</strong><small>商品名・個数・カテゴリーを入力</small></span></div>
+        <details class="collapsible-card add-card" id="addItemPanel">
+          <summary class="add-card-header"><span><strong>＋ 商品を追加</strong><small>商品名・個数・カテゴリーを入力</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
           <form id="addItemForm" class="form-stack add-form-body">
             <label>商品名<input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required></label>
             <div class="form-row"><label>個数<div class="stepper"><button id="decreaseCount" type="button" aria-label="個数を減らす">−</button><input id="itemCount" type="number" inputmode="numeric" min="1" value="1" required aria-label="個数"><button id="increaseCount" type="button" aria-label="個数を増やす">＋</button></div></label><label>カテゴリー<select id="itemCategory" required></select></label></div>
             <button id="addItemButton" class="primary-button full-width" type="submit">➕ リストに追加</button>
           </form>
-        </section>
+        </details>
         <div class="list-status"><span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span></div>
         <div id="shoppingList" class="item-list" aria-live="polite"></div>
       </section>
@@ -55,23 +55,23 @@
 
       <section class="tab-panel" data-panel="purchased" aria-labelledby="purchasedTabButton">
         <div class="history-view-switcher" role="tablist" aria-label="履歴の種類">
-          <button id="receiptHistoryViewButton" class="history-view-button active" type="button" role="tab" data-history-view="receipts" aria-controls="receiptHistoryView" aria-selected="true">レシート履歴</button>
-          <button id="recentHistoryViewButton" class="history-view-button" type="button" role="tab" data-history-view="recent" aria-controls="recentHistoryView" aria-selected="false">最近の購入履歴</button>
-          <button id="productHistoryViewButton" class="history-view-button" type="button" role="tab" data-history-view="products" aria-controls="productHistoryView" aria-selected="false">購入記録</button>
+          <button id="receiptHistoryViewButton" class="history-view-button" type="button" role="tab" data-history-view="receipts" aria-controls="receiptHistoryView" aria-selected="false">レシート履歴</button>
+          <button id="recentHistoryViewButton" class="history-view-button active" type="button" role="tab" data-history-view="recent" aria-controls="recentHistoryView" aria-selected="true">日付別</button>
+          <button id="productHistoryViewButton" class="history-view-button" type="button" role="tab" data-history-view="products" aria-controls="productHistoryView" aria-selected="false">商品別</button>
         </div>
-        <section id="receiptHistoryView" class="history-view active" role="tabpanel" aria-labelledby="receiptHistoryViewButton" data-history-panel="receipts">
+        <section id="receiptHistoryView" class="history-view" role="tabpanel" aria-labelledby="receiptHistoryViewButton" data-history-panel="receipts" hidden>
           <section class="monthly-spend-card history-monthly-spend" aria-label="今月の支出"><p>今月の支出</p><strong id="monthlySpend">¥0</strong></section>
           <div class="history-section-heading"><div><p class="eyebrow">レシート別</p><h2>レシート履歴</h2></div></div>
           <div class="receipt-search-row"><label>レシート検索<input id="receiptSearch" type="search" placeholder="店舗名・商品名"></label><label>月<select id="receiptMonthFilter"><option value="all">すべて</option></select></label></div>
           <div id="receiptList" class="receipt-list" aria-live="polite"></div>
         </section>
-        <section id="recentHistoryView" class="history-view" role="tabpanel" aria-labelledby="recentHistoryViewButton" data-history-panel="recent" hidden>
-          <div class="history-section-heading"><div><p class="eyebrow">日付別</p><h2>最近の購入履歴</h2></div><span id="purchaseRecordCountSummary" class="badge" aria-live="polite">0件</span></div>
+        <section id="recentHistoryView" class="history-view active" role="tabpanel" aria-labelledby="recentHistoryViewButton" data-history-panel="recent">
+          <div class="history-section-heading"><div><p class="eyebrow">購入日ごと</p><h2>日付別</h2></div><span id="purchaseRecordCountSummary" class="badge" aria-live="polite">0件</span></div>
           <div id="purchaseRecordList" class="purchase-record-list" aria-live="polite"></div>
         </section>
         <section id="productHistoryView" class="history-view" role="tabpanel" aria-labelledby="productHistoryViewButton" data-history-panel="products" hidden>
-          <section class="purchased-toolbar" aria-label="購入記録商品の絞り込み"><label>商品名で検索<input id="purchasedSearch" type="search" placeholder="例: 牛乳" autocomplete="off"></label><label>カテゴリー<select id="purchasedCategoryFilter"></select></label><label>並び替え<select id="purchasedSort"><option value="recent">最終購入順</option><option value="name">あいうえお順</option><option value="oldest">古いもの順</option><option value="frequent">購入頻度が高い順</option></select></label></section>
-          <div class="history-section-heading"><div><p class="eyebrow">商品別</p><h2>購入記録</h2></div><span id="purchasedCountSummary" class="badge" aria-live="polite">0件</span></div>
+          <section class="purchased-toolbar" aria-label="商品別履歴の絞り込み"><label>商品名で検索<input id="purchasedSearch" type="search" placeholder="例: 牛乳" autocomplete="off"></label><label>カテゴリー<select id="purchasedCategoryFilter"></select></label><label>並び替え<select id="purchasedSort"><option value="recent">最終購入順</option><option value="name">あいうえお順</option><option value="oldest">古いもの順</option><option value="frequent">購入頻度が高い順</option></select></label></section>
+          <div class="history-section-heading"><div><p class="eyebrow">商品ごと</p><h2>商品別</h2></div><span id="purchasedCountSummary" class="badge" aria-live="polite">0件</span></div>
           <div id="purchasedList" class="purchased-list" aria-live="polite"></div>
         </section>
       </section>
@@ -85,7 +85,7 @@
   <nav class="tab-nav" aria-label="メインメニュー"><button id="shoppingTabButton" class="tab-button active" type="button" data-tab="shopping">📝<span>買い物</span></button><button id="receiptsTabButton" class="tab-button" type="button" data-tab="receipts">🧾<span>レシート</span></button><button id="purchasedTabButton" class="tab-button" type="button" data-tab="purchased">📜<span>履歴</span></button><button id="settingsTabButton" class="tab-button" type="button" data-tab="settings">⚙<span>設定</span></button></nav>
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="js/storage.js?v=4.2.0"></script><script src="js/category.js?v=4.2.0"></script><script src="js/shopping.js?v=4.2.0"></script><script src="js/history.js?v=4.2.0"></script><script src="js/receipt-db.js?v=4.2.0"></script><script src="js/receipt-manager.js?v=4.2.0"></script><script src="js/receipt-ui.js?v=4.2.0"></script><script src="js/ui.js?v=4.2.0"></script><script src="js/app.js?v=4.2.0"></script>
+  <div id="toast" class="toast" role="status" aria-live="polite"><span id="toastMessage"></span><button id="toastUndoButton" class="toast-undo-button" type="button" hidden>元に戻す</button></div>
+  <script src="js/storage.js?v=4.3.0"></script><script src="js/category.js?v=4.3.0"></script><script src="js/shopping.js?v=4.3.0"></script><script src="js/history.js?v=4.3.0"></script><script src="js/receipt-db.js?v=4.3.0"></script><script src="js/receipt-manager.js?v=4.3.0"></script><script src="js/receipt-ui.js?v=4.3.0"></script><script src="js/ui.js?v=4.3.0"></script><script src="js/app.js?v=4.3.0"></script>
 </body>
 </html>

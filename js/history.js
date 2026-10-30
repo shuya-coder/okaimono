@@ -135,6 +135,22 @@ window.ShoppingApp.PurchasedManager = class PurchasedManager {
     return record;
   }
 
+  undoPurchase(recordId, previousPurchasedItem = null) {
+    const records = this.getPurchaseRecords();
+    const record = records.find((current) => current.id === String(recordId));
+    if (!record) return null;
+    this.savePurchaseRecords(records.filter((current) => current.id !== record.id));
+
+    const key = record.name.toLocaleLowerCase("ja-JP");
+    const items = this.getAll().filter((item) => item.name.toLocaleLowerCase("ja-JP") !== key);
+    if (previousPurchasedItem) {
+      this.save([{ ...previousPurchasedItem }, ...items]);
+    } else {
+      this.save(items);
+    }
+    return record;
+  }
+
   delete(id) {
     this.save(this.getAll().filter((item) => item.id !== id));
   }

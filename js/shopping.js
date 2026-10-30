@@ -173,6 +173,26 @@ window.ShoppingApp.ShoppingManager = class ShoppingManager {
     return purchasedItem;
   }
 
+  restorePurchased(item) {
+    if (!item || !String(item.name || "").trim()) return null;
+    const items = this.getAll();
+    const key = String(item.name).trim().toLocaleLowerCase("ja-JP");
+    const existing = items.find((current) => current.name.toLocaleLowerCase("ja-JP") === key);
+    if (existing) {
+      const restored = {
+        ...existing,
+        count: existing.count + Math.max(1, Number(item.count) || 1),
+        categoryId: Number(item.categoryId),
+        createdAt: new Date().toISOString(),
+      };
+      this.save([restored, ...items.filter((current) => current.id !== existing.id)]);
+      return restored;
+    }
+    const restored = { ...item, status: "list", checked: false };
+    this.save([restored, ...items]);
+    return restored;
+  }
+
   delete(id) {
     this.save(this.getAll().filter((item) => item.id !== id));
   }
