@@ -70,7 +70,6 @@ window.ShoppingApp.UI = class UI {
       categoryColor: document.querySelector("#categoryColor"),
       categoryList: document.querySelector("#categoryList"),
       darkModeButton: document.querySelector("#darkModeButton"),
-      themeQuickToggle: document.querySelector("#themeQuickToggle"),
       exportCsvButton: document.querySelector("#exportCsvButton"),
       importCsvInput: document.querySelector("#importCsvInput"),
       exportJsonButton: document.querySelector("#exportJsonButton"),
@@ -142,7 +141,6 @@ window.ShoppingApp.UI = class UI {
     this.elements.toastUndoButton.addEventListener("click", () => this.undoLastPurchase());
 
     this.elements.darkModeButton.addEventListener("click", () => this.toggleDarkMode());
-    this.elements.themeQuickToggle.addEventListener("click", () => this.toggleDarkMode());
     this.elements.exportCsvButton.addEventListener("click", () => this.exportCsv());
     this.elements.importCsvInput.addEventListener("change", (event) => this.importCsv(event));
     this.elements.exportJsonButton.addEventListener("click", () => this.exportJson());
@@ -710,12 +708,13 @@ window.ShoppingApp.UI = class UI {
     const nextValue = !document.body.classList.contains("dark-mode");
     this.applyTheme(nextValue);
     this.storage.set("darkMode", nextValue);
-    this.showToast(nextValue ? "ダークモードにしました" : "ライトモードにしました");
+    this.showToast(nextValue ? "ナイトモードをONにしました" : "ナイトモードをOFFにしました");
   }
 
   applyTheme(isDarkMode) {
     document.body.classList.toggle("dark-mode", isDarkMode);
-    this.elements.themeQuickToggle.textContent = isDarkMode ? "☀" : "🌙";
+    this.elements.darkModeButton.textContent = `ナイトモード：${isDarkMode ? "ON" : "OFF"}`;
+    this.elements.darkModeButton.setAttribute("aria-pressed", String(Boolean(isDarkMode)));
   }
 
   exportCsv() {

@@ -24,7 +24,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistorySort", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
@@ -54,10 +54,9 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.receiptList.addEventListener("click", (event) => this.handleReceiptAction(event));
     this.elements.priceHistorySearch.addEventListener("input", (event) => {
       this.priceHistorySearch = event.target.value;
-      this.renderProductOptions();
       this.renderPriceHistory();
     });
-    this.elements.priceHistoryProduct.addEventListener("change", () => this.renderPriceHistory());
+    this.elements.priceHistorySort.addEventListener("change", () => this.renderPriceHistory());
   }
 
   emptyReceipt() {
@@ -337,6 +336,11 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       notes: this.elements.receiptNotes.value,
       needsReview: this.currentItems.some((item) => item.uncertain),
     });
+    if (!existingId) {
+      this.monthFilter = this.localMonthKey(result.receipt.purchasedAt);
+      this.monthFilterInitialized = true;
+      this.monthFilterUserSelected = true;
+    }
     this.closeEditor();
     await this.renderAll();
     if (result.duplicate) alert(`同じレシートの可能性があります。\n${result.duplicate.storeName} / ${this.formatDate(result.duplicate.purchasedAt)} / ¥${this.formatMoney(result.duplicate.total)}\n両方とも保存されています。不要な方を削除してください。`);
@@ -367,7 +371,6 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.renderMonthOptions();
     this.renderSummary();
     this.renderReceiptList();
-    this.renderProductOptions();
     this.renderPriceHistory();
   }
 
@@ -387,17 +390,19 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
 
   renderSummary() {
     const receipts = this.receiptsForSelectedMonth();
+    const latestReceipt = receipts.slice().sort((a, b) => this.receiptSavedAt(b) - this.receiptSavedAt(a))[0];
+    const breakdownReceipts = latestReceipt ? [latestReceipt] : [];
     const allMonths = this.monthFilter === "all";
     const periodLabel = allMonths ? "すべての期間" : this.formatMonthLabel(this.monthFilter);
     this.elements.monthlySpendLabel.textContent = allMonths ? "すべての支出" : "選択月の支出";
     this.elements.monthlySpend.textContent = `¥${this.formatMoney(receipts.reduce((sum, receipt) => sum + receipt.total, 0))}`;
     this.elements.monthlySpend.closest(".monthly-spend-card")?.setAttribute("aria-label", `${periodLabel}の支出`);
-    this.elements.analysisPeriodLabel.textContent = `${periodLabel}・レシート履歴と連動`;
-    this.elements.receiptRecordCount.textContent = `${receipts.length}件`;
-    this.renderGroupedSummary(this.elements.dailySpend, receipts, (receipt) => this.localDateKey(receipt.purchasedAt).slice(5).replace("-", "/"));
-    this.renderGroupedSummary(this.elements.storeSpend, receipts, (receipt) => receipt.storeName || "店舗不明");
+    this.elements.analysisPeriodLabel.textContent = `${periodLabel}・直近のレシート1件`;
+    this.elements.receiptRecordCount.textContent = `${breakdownReceipts.length}件`;
+    this.renderGroupedSummary(this.elements.dailySpend, breakdownReceipts, (receipt) => this.localDateKey(receipt.purchasedAt).slice(5).replace("-", "/"));
+    this.renderGroupedSummary(this.elements.storeSpend, breakdownReceipts, (receipt) => receipt.storeName || "店舗不明");
     const categoryTotals = new Map();
-    receipts.flatMap((receipt) => receipt.items).forEach((item) => {
+    breakdownReceipts.flatMap((receipt) => receipt.items).forEach((item) => {
       const label = this.categoryManager.findById(item.categoryId)?.name || "未分類";
       const key = this.normalizeSummaryKey(label);
       const current = categoryTotals.get(key) || { label, amount: 0 };
@@ -406,6 +411,11 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     });
     const categoryRows = [...categoryTotals.values()];
     this.elements.categorySpend.innerHTML = this.summaryRows(categoryRows);
+  }
+
+  receiptSavedAt(receipt) {
+    const value = Date.parse(receipt.updatedAt || receipt.createdAt || receipt.purchasedAt || "");
+    return Number.isFinite(value) ? value : 0;
   }
 
   renderGroupedSummary(element, receipts, keyOf) {
@@ -471,26 +481,24 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       </details>`;
   }
 
-  renderProductOptions() {
-    const query = this.normalizeSummaryKey(this.priceHistorySearch);
-    const names = [...new Set((this.receipts || []).flatMap((receipt) => receipt.items.map((item) => item.name)))]
-      .filter((name) => !query || this.normalizeSummaryKey(name).includes(query))
-      .sort((a, b) => a.localeCompare(b, "ja"));
-    const current = this.elements.priceHistoryProduct.value;
-    const emptyLabel = query && names.length === 0 ? "候補がありません" : "商品を選択";
-    this.elements.priceHistoryProduct.innerHTML = `<option value="">${emptyLabel}</option>${names.map((name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`).join("")}`;
-    if (names.includes(current)) this.elements.priceHistoryProduct.value = current;
-  }
-
   renderPriceHistory() {
-    const name = this.elements.priceHistoryProduct.value;
-    if (!name) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">商品を選ぶと価格推移を表示します。</p>`; return; }
-    const points = (this.receipts || []).flatMap((receipt) => receipt.items.filter((item) => item.name === name).map((item) => ({ date: receipt.purchasedAt, store: receipt.storeName, price: item.unitPrice ?? (item.amount !== null && item.quantity ? item.amount / item.quantity : null) })).filter((point) => Number.isFinite(point.price))).sort((a, b) => new Date(a.date) - new Date(b.date));
-    const previous = points.at(-2);
-    const latest = points.at(-1);
+    const query = this.normalizeSummaryKey(this.priceHistorySearch);
+    if (!query) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">商品名を入力すると価格推移を表示します。</p>`; return; }
+    const points = (this.receipts || []).flatMap((receipt) => receipt.items
+      .filter((item) => this.normalizeSummaryKey(item.name).includes(query))
+      .map((item) => ({ name: item.name, date: receipt.purchasedAt, store: receipt.storeName, price: item.unitPrice ?? (item.amount !== null && item.quantity ? item.amount / item.quantity : null) }))
+      .filter((point) => Number.isFinite(point.price)));
+    if (!points.length) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">一致する価格履歴はありません。</p>`; return; }
+    const chronological = points.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    const names = [...new Set(points.map((point) => point.name))];
+    const sameProduct = names.length === 1;
+    const previous = sameProduct ? chronological.at(-2) : null;
+    const latest = sameProduct ? chronological.at(-1) : null;
     const change = previous && latest ? latest.price - previous.price : null;
-    const comparison = change === null ? "比較データなし" : change === 0 ? "前回と同じ" : `${change > 0 ? "値上がり" : "値下がり"} ¥${this.formatMoney(Math.abs(change))}`;
-    this.elements.priceHistory.innerHTML = `<p class="price-comparison">${comparison}</p>${points.map((point) => `<div><span>${this.formatDate(point.date)} ${this.escapeHtml(point.store)}</span><strong>¥${this.formatMoney(point.price)}</strong></div>`).join("")}`;
+    const comparison = !sameProduct ? `${names.length}商品の価格履歴` : change === null ? "比較データなし" : change === 0 ? "前回と同じ" : `${change > 0 ? "値上がり" : "値下がり"} ¥${this.formatMoney(Math.abs(change))}`;
+    const sort = this.elements.priceHistorySort.value;
+    points.sort((a, b) => sort === "date-asc" ? new Date(a.date) - new Date(b.date) : sort === "price-desc" ? b.price - a.price : sort === "price-asc" ? a.price - b.price : new Date(b.date) - new Date(a.date));
+    this.elements.priceHistory.innerHTML = `<p class="price-comparison">${comparison}</p>${points.map((point) => `<div><span>${sameProduct ? "" : `${this.escapeHtml(point.name)}・`}${this.formatDate(point.date)} ${this.escapeHtml(point.store)}</span><strong>¥${this.formatMoney(point.price)}</strong></div>`).join("")}`;
   }
 
   async exportData() {
