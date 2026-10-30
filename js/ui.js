@@ -15,6 +15,7 @@ window.ShoppingApp.UI = class UI {
     this.pendingBackup = null;
     this.toastTimer = null;
     this.keyboardTimer = null;
+    this.addPanelGuardUntil = 0;
     this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
     this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
     this.elements = {};
@@ -89,6 +90,11 @@ window.ShoppingApp.UI = class UI {
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
+    this.elements.addItemPanel.addEventListener("toggle", () => {
+      if (!this.elements.addItemPanel.open && performance.now() < this.addPanelGuardUntil) {
+        this.elements.addItemPanel.open = true;
+      }
+    });
     this.elements.addItemButton.addEventListener("touchstart", (event) => {
       event.preventDefault();
       this.elements.addItemForm.requestSubmit();
@@ -243,19 +249,33 @@ window.ShoppingApp.UI = class UI {
     });
     if (!item) return;
 
+    this.prepareContinuousAdd(selectedCategoryId);
+    this.renderShoppingList();
+  }
+
+  prepareContinuousAdd(selectedCategoryId) {
     this.elements.itemName.value = "";
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = selectedCategoryId;
-    this.elements.addItemPanel.open = true;
-    this.elements.itemName.focus({ preventScroll: true });
-    this.renderShoppingList();
-    this.ensureFocusedFieldVisible();
-    requestAnimationFrame(() => {
-      if (document.activeElement !== this.elements.itemName) {
+    this.addPanelGuardUntil = performance.now() + 1200;
+
+    const restoreInput = () => {
+      if (performance.now() > this.addPanelGuardUntil) return;
+      this.elements.addItemPanel.open = true;
+      const active = document.activeElement;
+      const canRestoreFocus = active === document.body
+        || active === this.elements.addItemButton
+        || active === this.elements.itemName;
+      if (canRestoreFocus && active !== this.elements.itemName) {
         this.elements.itemName.focus({ preventScroll: true });
       }
       this.ensureFocusedFieldVisible();
-    });
+    };
+
+    restoreInput();
+    requestAnimationFrame(restoreInput);
+    window.setTimeout(restoreInput, 80);
+    window.setTimeout(restoreInput, 240);
   }
 
   adjustInputCount(amount) {

@@ -9,17 +9,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.1.1">
+  <link rel="manifest" href="manifest.webmanifest?v=4.1.2">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=4.1.1">
+  <link rel="stylesheet" href="css/style.css?v=4.1.2">
 </head>
 <body>
   <div class="app-shell">
     <header class="app-header"><div><p class="eyebrow">買い物中でもすばやく操作</p><h1>買い物リスト</h1></div><button id="themeQuickToggle" class="icon-button" type="button" aria-label="ダークモード切替">🌙</button></header>
     <main id="mainContent">
       <section class="tab-panel active" data-panel="shopping" aria-labelledby="shoppingTabButton">
-        <details class="collapsible-card add-card" id="addItemPanel">
+        <details class="collapsible-card add-card" id="addItemPanel" open>
           <summary><span><strong>＋ 商品を追加</strong><small>商品名・個数・カテゴリーを入力</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
           <form id="addItemForm" class="form-stack add-form-body">
             <label>商品名<input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required></label>
@@ -86,6 +86,6 @@
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="js/storage.js?v=4.1.1"></script><script src="js/category.js?v=4.1.1"></script><script src="js/shopping.js?v=4.1.1"></script><script src="js/history.js?v=4.1.1"></script><script src="js/receipt-db.js?v=4.1.1"></script><script src="js/receipt-manager.js?v=4.1.1"></script><script src="js/receipt-ui.js?v=4.1.1"></script><script src="js/ui.js?v=4.1.1"></script><script src="js/app.js?v=4.1.1"></script>
+  <script src="js/storage.js?v=4.1.2"></script><script src="js/category.js?v=4.1.2"></script><script src="js/shopping.js?v=4.1.2"></script><script src="js/history.js?v=4.1.2"></script><script src="js/receipt-db.js?v=4.1.2"></script><script src="js/receipt-manager.js?v=4.1.2"></script><script src="js/receipt-ui.js?v=4.1.2"></script><script src="js/ui.js?v=4.1.2"></script><script src="js/app.js?v=4.1.2"></script>
 </body>
 </html>
