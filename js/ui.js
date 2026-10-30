@@ -293,6 +293,7 @@ window.ShoppingApp.UI = class UI {
     if (this.isComposingItemName) return;
     const field = document.activeElement;
     if (!this.isKeyboardInput(field)) return;
+    if (field.hasAttribute("data-native-keyboard-scroll")) return;
     const viewport = window.visualViewport;
     const top = viewport?.offsetTop || 0;
     const bottom = top + (viewport?.height || window.innerHeight);

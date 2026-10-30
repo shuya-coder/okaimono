@@ -11,6 +11,9 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.pendingImportCandidates = [];
     this.search = "";
     this.priceHistorySearch = "";
+    this.isComposingPriceHistorySearch = false;
+    this.selectedPriceHistoryProduct = "";
+    this.priceHistorySuggestionNames = [];
     this.monthFilter = "";
     this.monthFilterInitialized = false;
     this.monthFilterUserSelected = false;
@@ -24,7 +27,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistorySort", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistorySuggestions", "priceHistorySort", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
@@ -52,10 +55,31 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       this.renderReceiptList();
     });
     this.elements.receiptList.addEventListener("click", (event) => this.handleReceiptAction(event));
-    this.elements.priceHistorySearch.addEventListener("input", (event) => {
+    this.elements.priceHistorySearch.addEventListener("compositionstart", () => {
+      this.isComposingPriceHistorySearch = true;
+    });
+    this.elements.priceHistorySearch.addEventListener("compositionend", (event) => {
+      this.isComposingPriceHistorySearch = false;
       this.priceHistorySearch = event.target.value;
+      this.selectedPriceHistoryProduct = "";
+      this.renderPriceHistorySuggestions();
       this.renderPriceHistory();
     });
+    this.elements.priceHistorySearch.addEventListener("input", (event) => {
+      this.priceHistorySearch = event.target.value;
+      if (this.isComposingPriceHistorySearch || event.isComposing) return;
+      this.selectedPriceHistoryProduct = "";
+      this.renderPriceHistorySuggestions();
+      this.renderPriceHistory();
+    });
+    this.elements.priceHistorySearch.addEventListener("focus", () => this.renderPriceHistorySuggestions());
+    this.elements.priceHistorySearch.addEventListener("blur", () => {
+      window.setTimeout(() => this.hidePriceHistorySuggestions(), 150);
+    });
+    this.elements.priceHistorySuggestions.addEventListener("pointerdown", (event) => {
+      if (event.target.closest("[data-suggestion-index]")) event.preventDefault();
+    });
+    this.elements.priceHistorySuggestions.addEventListener("click", (event) => this.selectPriceHistorySuggestion(event));
     this.elements.priceHistorySort.addEventListener("change", () => this.renderPriceHistory());
   }
 
@@ -482,10 +506,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderPriceHistory() {
-    const query = this.normalizeSummaryKey(this.priceHistorySearch);
-    if (!query) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">商品名を入力すると価格推移を表示します。</p>`; return; }
+    const selectedName = this.selectedPriceHistoryProduct;
+    if (!selectedName) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">候補から商品を選ぶと価格推移を表示します。</p>`; return; }
     const points = (this.receipts || []).flatMap((receipt) => receipt.items
-      .filter((item) => this.normalizeSummaryKey(item.name).includes(query))
+      .filter((item) => item.name === selectedName)
       .map((item) => ({ name: item.name, date: receipt.purchasedAt, store: receipt.storeName, price: item.unitPrice ?? (item.amount !== null && item.quantity ? item.amount / item.quantity : null) }))
       .filter((point) => Number.isFinite(point.price)));
     if (!points.length) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">一致する価格履歴はありません。</p>`; return; }
@@ -499,6 +523,52 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const sort = this.elements.priceHistorySort.value;
     points.sort((a, b) => sort === "date-asc" ? new Date(a.date) - new Date(b.date) : sort === "price-desc" ? b.price - a.price : sort === "price-asc" ? a.price - b.price : new Date(b.date) - new Date(a.date));
     this.elements.priceHistory.innerHTML = `<p class="price-comparison">${comparison}</p>${points.map((point) => `<div><span>${sameProduct ? "" : `${this.escapeHtml(point.name)}・`}${this.formatDate(point.date)} ${this.escapeHtml(point.store)}</span><strong>¥${this.formatMoney(point.price)}</strong></div>`).join("")}`;
+  }
+
+  renderPriceHistorySuggestions() {
+    if (this.isComposingPriceHistorySearch) return;
+    const query = this.normalizeProductSearchText(this.elements.priceHistorySearch.value);
+    if (!query) {
+      this.hidePriceHistorySuggestions();
+      return;
+    }
+    this.priceHistorySuggestionNames = [...new Set((this.receipts || []).flatMap((receipt) => receipt.items.map((item) => item.name)))]
+      .filter((name) => this.normalizeProductSearchText(name).includes(query))
+      .sort((a, b) => a.localeCompare(b, "ja"))
+      .slice(0, 20);
+    this.elements.priceHistorySuggestions.innerHTML = this.priceHistorySuggestionNames.length
+      ? this.priceHistorySuggestionNames.map((name, index) => `<button type="button" role="option" data-suggestion-index="${index}">${this.escapeHtml(name)}</button>`).join("")
+      : `<p class="empty-inline">一致する商品はありません。</p>`;
+    this.elements.priceHistorySuggestions.hidden = false;
+    this.elements.priceHistorySearch.setAttribute("aria-expanded", "true");
+  }
+
+  hidePriceHistorySuggestions() {
+    this.elements.priceHistorySuggestions.hidden = true;
+    this.elements.priceHistorySearch.setAttribute("aria-expanded", "false");
+  }
+
+  selectPriceHistorySuggestion(event) {
+    const button = event.target.closest("[data-suggestion-index]");
+    if (!button) return;
+    const name = this.priceHistorySuggestionNames[Number(button.dataset.suggestionIndex)];
+    if (!name) return;
+    this.selectedPriceHistoryProduct = name;
+    this.priceHistorySearch = name;
+    this.elements.priceHistorySearch.value = name;
+    this.renderPriceHistory();
+    this.elements.priceHistorySearch.focus({ preventScroll: true });
+    this.elements.priceHistorySearch.setSelectionRange(name.length, name.length);
+    this.hidePriceHistorySuggestions();
+  }
+
+  normalizeProductSearchText(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .toLocaleLowerCase("ja-JP")
+      .replace(/[\u3041-\u3096]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 0x60))
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   async exportData() {
