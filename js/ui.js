@@ -15,6 +15,7 @@ window.ShoppingApp.UI = class UI {
     this.toastTimer = null;
     this.keyboardTimer = null;
     this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
+    this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
     this.elements = {};
   }
 
@@ -34,6 +35,7 @@ window.ShoppingApp.UI = class UI {
       shoppingList: document.querySelector("#shoppingList"),
       addItemPanel: document.querySelector("#addItemPanel"),
       addItemForm: document.querySelector("#addItemForm"),
+      addItemButton: document.querySelector("#addItemButton"),
       itemName: document.querySelector("#itemName"),
       itemCount: document.querySelector("#itemCount"),
       itemCategory: document.querySelector("#itemCategory"),
@@ -81,6 +83,10 @@ window.ShoppingApp.UI = class UI {
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
+    this.elements.addItemButton.addEventListener("touchstart", (event) => {
+      event.preventDefault();
+      this.elements.addItemForm.requestSubmit();
+    }, { passive: false });
     this.elements.decreaseCount.addEventListener("click", () => this.adjustInputCount(-1));
     this.elements.increaseCount.addEventListener("click", () => this.adjustInputCount(1));
 
@@ -120,6 +126,13 @@ window.ShoppingApp.UI = class UI {
     document.addEventListener("focusout", () => this.handleKeyboardBlur());
     window.visualViewport?.addEventListener("resize", () => this.updateKeyboardState());
     window.visualViewport?.addEventListener("scroll", () => this.ensureFocusedFieldVisible());
+    window.addEventListener("orientationchange", () => {
+      window.setTimeout(() => {
+        this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
+        this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
+        document.body.classList.remove("keyboard-open");
+      }, 300);
+    });
   }
 
   switchTab(tabName) {
@@ -142,8 +155,9 @@ window.ShoppingApp.UI = class UI {
 
   handleKeyboardFocus(event) {
     if (!this.isKeyboardInput(event.target) || window.innerWidth > 760) return;
-    document.body.classList.add("keyboard-open");
     window.clearTimeout(this.keyboardTimer);
+    this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
+    this.updateKeyboardState();
     this.keyboardTimer = window.setTimeout(() => {
       this.updateKeyboardState();
       this.ensureFocusedFieldVisible();
@@ -156,6 +170,7 @@ window.ShoppingApp.UI = class UI {
       if (!this.isKeyboardInput(document.activeElement)) {
         document.body.classList.remove("keyboard-open");
         this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
+        this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
       }
     }, 120);
   }
@@ -163,14 +178,25 @@ window.ShoppingApp.UI = class UI {
   updateKeyboardState() {
     const viewport = window.visualViewport;
     const activeInput = this.isKeyboardInput(document.activeElement);
-    if (!viewport || !activeInput || window.innerWidth > 760) {
-      if (!activeInput) document.body.classList.remove("keyboard-open");
+    if (!viewport || window.innerWidth > 760) {
+      document.body.classList.remove("keyboard-open");
       return;
     }
-    this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
-    const keyboardVisible = this.viewportMaxHeight - viewport.height > 80 || activeInput;
+    if (Math.abs(viewport.width - this.viewportBaselineWidth) > 60) {
+      this.viewportBaselineWidth = viewport.width;
+      this.viewportMaxHeight = viewport.height;
+      document.body.classList.remove("keyboard-open");
+      return;
+    }
+    if (!activeInput) {
+      document.body.classList.remove("keyboard-open");
+      this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
+      return;
+    }
+    const keyboardVisible = this.viewportMaxHeight - viewport.height > 120;
     document.body.classList.toggle("keyboard-open", keyboardVisible);
     if (keyboardVisible) this.ensureFocusedFieldVisible();
+    else this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
   }
 
   ensureFocusedFieldVisible() {
@@ -199,9 +225,13 @@ window.ShoppingApp.UI = class UI {
     this.elements.itemCount.value = 1;
     this.elements.itemCategory.value = selectedCategoryId;
     this.elements.addItemPanel.open = true;
+    this.elements.itemName.focus({ preventScroll: true });
     this.renderShoppingList();
+    this.ensureFocusedFieldVisible();
     requestAnimationFrame(() => {
-      this.elements.itemName.focus({ preventScroll: true });
+      if (document.activeElement !== this.elements.itemName) {
+        this.elements.itemName.focus({ preventScroll: true });
+      }
       this.ensureFocusedFieldVisible();
     });
   }

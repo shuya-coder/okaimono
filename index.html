@@ -7,12 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="買い物リスト">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=3.3.0">
+  <link rel="manifest" href="manifest.webmanifest?v=4.0.0">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=3.3.0">
+  <link rel="stylesheet" href="css/style.css?v=4.0.0">
 </head>
 <body>
   <div class="app-shell">
@@ -24,7 +24,7 @@
           <form id="addItemForm" class="form-stack add-form-body">
             <label>商品名<input id="itemName" type="text" autocomplete="off" placeholder="例: 牛乳" required></label>
             <div class="form-row"><label>個数<div class="stepper"><button id="decreaseCount" type="button" aria-label="個数を減らす">−</button><input id="itemCount" type="number" inputmode="numeric" min="1" value="1" required aria-label="個数"><button id="increaseCount" type="button" aria-label="個数を増やす">＋</button></div></label><label>カテゴリー<select id="itemCategory" required></select></label></div>
-            <button class="primary-button full-width" type="submit">➕ リストに追加</button>
+            <button id="addItemButton" class="primary-button full-width" type="submit">➕ リストに追加</button>
           </form>
         </details>
         <div class="list-status"><span id="shoppingCountSummary" class="badge" aria-live="polite">0件</span></div>
@@ -34,14 +34,17 @@
       <section class="tab-panel" data-panel="receipts" aria-labelledby="receiptsTabButton">
         <section class="monthly-spend-card"><label for="receiptMonth">対象月</label><input id="receiptMonth" type="month"><p>今月の支出</p><strong id="monthlySpend">¥0</strong></section>
         <section class="card receipt-capture-card">
-          <div class="section-title"><h2>レシートを登録</h2><span class="privacy-badge">端末内だけで解析</span></div>
-          <div class="receipt-capture-actions"><label class="primary-button file-button">📷 撮影・画像選択<input id="receiptImageInput" type="file" accept="image/*" capture="environment"></label><button id="manualReceiptButton" class="secondary-button" type="button">✍ 手入力</button></div>
-          <div id="ocrProgress" class="ocr-progress" hidden><progress id="ocrProgressBar" max="1" value="0"></progress><span id="ocrProgressText">準備中…</span></div>
-          <p class="note">画像はブラウザ内OCRにだけ使い、解析後は保存しません。初回OCRは言語データの読込に時間がかかります。</p>
+          <div class="section-title"><h2>ChatGPT解析結果を取り込む</h2><span class="privacy-badge">アプリから外部送信なし</span></div>
+          <ol class="chatgpt-import-steps"><li>解析指示をコピー</li><li>ChatGPTにレシート写真と指示を送る</li><li>返されたJSONを貼り付けて読み込む</li></ol>
+          <button id="copyChatGptPromptButton" class="secondary-button copy-prompt-button" type="button">📋 ChatGPT用の解析指示をコピー</button>
+          <label class="json-import-label" for="chatGptReceiptJson">ChatGPT解析結果を貼り付ける<textarea id="chatGptReceiptJson" rows="10" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="{&#10;  &quot;schemaVersion&quot;: &quot;okaimono-receipt-v1&quot;,&#10;  ...&#10;}"></textarea></label>
+          <p id="chatGptImportError" class="error-message" role="alert" hidden></p>
+          <div class="receipt-import-actions"><button id="importChatGptJsonButton" class="primary-button" type="button">JSONを読み込む</button><button id="manualReceiptButton" class="secondary-button" type="button">✍ 手入力で登録</button></div>
+          <p class="note">このアプリからChatGPTや外部APIへデータを送信することはありません。ChatGPTへの写真送信は、ご自身で内容を確認して行ってください。</p>
         </section>
         <section id="receiptEditor" class="card receipt-editor" hidden>
           <div class="section-title"><h2 id="receiptEditorTitle">レシート内容の確認</h2><span id="receiptReviewBadge" class="review-badge" hidden>要確認</span></div>
-          <form id="receiptForm" class="form-stack"><input id="receiptId" type="hidden"><div class="receipt-fields"><label>店舗名<input id="receiptStore" type="text" required></label><label>購入日時<input id="receiptDate" type="datetime-local" required></label><label>割引額<input id="receiptDiscount" type="number" inputmode="numeric" min="0" step="1" value="0"></label><label>税額<input id="receiptTax" type="number" inputmode="numeric" min="0" step="1" value="0"></label><label>確認した合計額<input id="receiptTotal" type="number" inputmode="numeric" min="0" step="1" required></label></div><div class="section-title"><h3>商品明細</h3><button id="addReceiptItemButton" class="secondary-button compact-button" type="button">＋ 明細</button></div><div id="receiptItemsEditor" class="receipt-items-editor"></div><div id="receiptDifferenceWarning" class="warning-message" hidden></div><label>メモ<textarea id="receiptNotes" rows="2"></textarea></label><details><summary>OCR原文を確認</summary><pre id="receiptRawText" class="ocr-raw-text"></pre></details><div class="dialog-actions"><button id="cancelReceiptButton" class="secondary-button" type="button">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form>
+          <form id="receiptForm" class="form-stack"><input id="receiptId" type="hidden"><div class="receipt-fields"><label>店舗名<input id="receiptStore" type="text" required></label><label>購入日時<input id="receiptDate" type="datetime-local" required></label><label>レシート記載の小計・商品合計<input id="receiptSubtotal" type="number" inputmode="numeric" min="0" step="1"></label><label>割引額<input id="receiptDiscount" type="number" inputmode="numeric" min="0" step="1"></label><label>内税額（合計へ加算しない）<input id="receiptIncludedTax" type="number" inputmode="numeric" min="0" step="1"></label><label>外税額<input id="receiptTax" type="number" inputmode="numeric" min="0" step="1"></label><label>確認した支払合計<input id="receiptTotal" type="number" inputmode="numeric" min="0" step="1" required></label></div><div class="section-title"><h3>商品明細</h3><button id="addReceiptItemButton" class="secondary-button compact-button" type="button">＋ 明細</button></div><div id="receiptItemsEditor" class="receipt-items-editor"></div><div id="receiptDifferenceWarning" class="warning-message" hidden></div><label>メモ<textarea id="receiptNotes" rows="2"></textarea></label><details><summary>解析元データを確認</summary><pre id="receiptRawText" class="analysis-raw-text"></pre></details><div class="dialog-actions"><button id="cancelReceiptButton" class="secondary-button" type="button">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form>
         </section>
         <section class="card"><div class="section-title"><h2>支出の内訳</h2><span id="receiptRecordCount" class="badge">0件</span></div><div class="analytics-grid"><div><h3>日別</h3><div id="dailySpend" class="summary-list"></div></div><div><h3>店舗別</h3><div id="storeSpend" class="summary-list"></div></div><div><h3>カテゴリ別</h3><div id="categorySpend" class="summary-list"></div></div></div></section>
         <section class="card"><div class="section-title"><h2>価格推移</h2></div><label>商品<select id="priceHistoryProduct"><option value="">商品を選択</option></select></label><div id="priceHistory" class="price-history"></div></section>
@@ -66,7 +69,6 @@
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="vendor/tesseract/tesseract.min.js?v=7.0.0"></script>
-  <script src="js/storage.js?v=3.3.0"></script><script src="js/category.js?v=3.3.0"></script><script src="js/shopping.js?v=3.3.0"></script><script src="js/history.js?v=3.3.0"></script><script src="js/receipt-db.js?v=3.3.0"></script><script src="js/receipt-manager.js?v=3.3.0"></script><script src="js/receipt-ui.js?v=3.3.0"></script><script src="js/ui.js?v=3.3.0"></script><script src="js/app.js?v=3.3.0"></script>
+  <script src="js/storage.js?v=4.0.0"></script><script src="js/category.js?v=4.0.0"></script><script src="js/shopping.js?v=4.0.0"></script><script src="js/history.js?v=4.0.0"></script><script src="js/receipt-db.js?v=4.0.0"></script><script src="js/receipt-manager.js?v=4.0.0"></script><script src="js/receipt-ui.js?v=4.0.0"></script><script src="js/ui.js?v=4.0.0"></script><script src="js/app.js?v=4.0.0"></script>
 </body>
 </html>

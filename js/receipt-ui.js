@@ -6,6 +6,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.categoryManager = categoryManager;
     this.showToast = showToast;
     this.currentItems = [];
+    this.currentReceiptMeta = {};
     this.search = "";
     this.monthFilter = "all";
     this.elements = {};
@@ -20,19 +21,20 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["receiptMonth", "monthlySpend", "receiptImageInput", "manualReceiptButton", "ocrProgress", "ocrProgressBar", "ocrProgressText", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptDiscount", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["receiptMonth", "monthlySpend", "copyChatGptPromptButton", "chatGptReceiptJson", "importChatGptJsonButton", "chatGptImportError", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
   bindEvents() {
     this.elements.receiptMonth.addEventListener("change", () => this.renderAll());
-    this.elements.receiptImageInput.addEventListener("change", (event) => this.handleImage(event));
+    this.elements.copyChatGptPromptButton.addEventListener("click", () => this.copyChatGptPrompt());
+    this.elements.importChatGptJsonButton.addEventListener("click", () => this.importChatGptJson());
     this.elements.manualReceiptButton.addEventListener("click", () => this.openEditor(this.emptyReceipt()));
     this.elements.addReceiptItemButton.addEventListener("click", () => this.addItem());
     this.elements.receiptItemsEditor.addEventListener("input", (event) => this.updateItem(event));
     this.elements.receiptItemsEditor.addEventListener("change", (event) => this.updateItem(event));
     this.elements.receiptItemsEditor.addEventListener("click", (event) => this.removeItem(event));
-    [this.elements.receiptDiscount, this.elements.receiptTax, this.elements.receiptTotal].forEach((element) => element.addEventListener("input", () => this.renderDifference()));
+    [this.elements.receiptSubtotal, this.elements.receiptDiscount, this.elements.receiptIncludedTax, this.elements.receiptTax, this.elements.receiptTotal].forEach((element) => element.addEventListener("input", () => this.renderDifference()));
     this.elements.receiptForm.addEventListener("submit", (event) => this.saveReceipt(event));
     this.elements.cancelReceiptButton.addEventListener("click", () => this.closeEditor());
     this.elements.receiptSearch.addEventListener("input", (event) => { this.search = event.target.value.trim().toLocaleLowerCase("ja-JP"); this.renderReceiptList(); });
@@ -42,31 +44,39 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   emptyReceipt() {
-    return { storeName: "", purchasedAt: new Date().toISOString(), items: [], discount: 0, tax: 0, total: 0, notes: "", rawText: "", needsReview: false };
+    return { storeName: "", purchasedAt: new Date().toISOString(), items: [], discount: 0, tax: 0, includedTax: 0, subtotal: null, deposit: null, total: 0, notes: "", rawText: "", source: "manual", needsReview: false };
   }
 
-  async handleImage(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    this.elements.ocrProgress.hidden = false;
-    this.elements.ocrProgressBar.value = 0;
-    this.elements.ocrProgressText.textContent = "画像を補正しています…";
+  async copyChatGptPrompt() {
+    const prompt = this.manager.getChatGptPrompt();
     try {
-      const result = await this.manager.recognize(file, (progress) => {
-        const value = Number(progress.progress) || 0;
-        this.elements.ocrProgressBar.value = value;
-        const labels = { "loading tesseract core": "OCR本体を準備中", "loading language traineddata": "日本語データを読込中", "initializing api": "解析を準備中", "recognizing text": "文字を解析中" };
-        this.elements.ocrProgressText.textContent = `${labels[progress.status] || progress.status || "解析中"} ${Math.round(value * 100)}%`;
-      });
+      await navigator.clipboard.writeText(prompt);
+    } catch {
+      const helper = document.createElement("textarea");
+      helper.value = prompt;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.append(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      helper.remove();
+      if (!copied) throw new Error("コピーできませんでした");
+    }
+    this.showToast("ChatGPT用の解析指示をコピーしました");
+  }
+
+  async importChatGptJson() {
+    this.elements.chatGptImportError.hidden = true;
+    this.elements.chatGptImportError.textContent = "";
+    try {
+      const result = await this.manager.importChatGptJson(this.elements.chatGptReceiptJson.value);
       this.openEditor(result);
+      this.elements.chatGptReceiptJson.value = "";
       this.showToast("解析結果を確認して保存してください");
     } catch (error) {
-      console.error(error);
-      alert("レシートを読み取れませんでした。手入力画面を開きます。");
-      this.openEditor(this.emptyReceipt());
-    } finally {
-      event.target.value = "";
-      this.elements.ocrProgress.hidden = true;
+      this.elements.chatGptImportError.textContent = error.message || "JSONを読み込めませんでした。";
+      this.elements.chatGptImportError.hidden = false;
     }
   }
 
@@ -75,12 +85,20 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.receiptEditorTitle.textContent = receipt.id ? "レシートを編集" : "レシート内容の確認";
     this.elements.receiptStore.value = receipt.storeName || "";
     this.elements.receiptDate.value = this.toLocalDateTime(receipt.purchasedAt);
-    this.elements.receiptDiscount.value = Number(receipt.discount) || 0;
-    this.elements.receiptTax.value = Number(receipt.tax) || 0;
-    this.elements.receiptTotal.value = Number(receipt.total) || 0;
+    this.elements.receiptSubtotal.value = this.inputNumber(receipt.subtotal);
+    this.elements.receiptDiscount.value = this.inputNumber(receipt.discount);
+    this.elements.receiptIncludedTax.value = this.inputNumber(receipt.includedTax);
+    this.elements.receiptTax.value = this.inputNumber(receipt.tax);
+    this.elements.receiptTotal.value = this.inputNumber(receipt.total);
     this.elements.receiptNotes.value = receipt.notes || "";
-    this.elements.receiptRawText.textContent = receipt.rawText || "手入力のためOCR原文はありません。";
+    this.elements.receiptRawText.textContent = receipt.rawText || "手入力のため解析元JSONはありません。";
     this.elements.receiptReviewBadge.hidden = !receipt.needsReview;
+    this.currentReceiptMeta = {
+      includedTax: Number(receipt.includedTax) || 0,
+      subtotal: this.numberOrNull(receipt.subtotal),
+      deposit: this.numberOrNull(receipt.deposit),
+      source: receipt.source || "manual",
+    };
     this.currentItems = (receipt.items || []).map((item) => ({ ...item }));
     if (this.currentItems.length === 0) this.addItem(false);
     this.renderItemEditor();
@@ -92,6 +110,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   closeEditor() {
     this.elements.receiptEditor.hidden = true;
     this.currentItems = [];
+    this.currentReceiptMeta = {};
   }
 
   addItem(render = true) {
@@ -104,9 +123,9 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.receiptItemsEditor.innerHTML = this.currentItems.map((item, index) => `
       <div class="receipt-item-editor" data-index="${index}">
         <label class="receipt-item-name">商品名<input data-field="name" type="text" value="${this.escapeHtml(item.name)}" required></label>
-        <label>数量<input data-field="quantity" type="number" min="0.01" step="0.01" value="${item.quantity}"></label>
-        <label>単価<input data-field="unitPrice" type="number" min="0" step="1" value="${item.unitPrice}"></label>
-        <label>金額<input data-field="amount" type="number" min="0" step="1" value="${item.amount}"></label>
+        <label>数量<input data-field="quantity" type="number" min="0.01" step="0.01" value="${this.inputNumber(item.quantity)}"></label>
+        <label>単価<input data-field="unitPrice" type="number" min="0" step="1" value="${this.inputNumber(item.unitPrice)}"></label>
+        <label>金額<input data-field="amount" type="number" min="0" step="1" value="${this.inputNumber(item.amount)}"></label>
         <label class="receipt-item-category">カテゴリ<select data-field="categoryId">${categories.map((category) => `<option value="${category.id}" ${category.id === Number(item.categoryId) ? "selected" : ""}>${this.escapeHtml(category.name)}</option>`).join("")}</select></label>
         <label class="uncertain-toggle"><input data-field="uncertain" type="checkbox" ${item.uncertain ? "checked" : ""}>要確認</label>
         <button class="small-button danger" type="button" data-action="remove-receipt-item">削除</button>
@@ -121,9 +140,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const field = event.target.dataset.field;
     if (!item || !field) return;
     if (field === "uncertain") item[field] = event.target.checked;
-    else if (["quantity", "unitPrice", "amount", "categoryId"].includes(field)) item[field] = Number(event.target.value) || 0;
+    else if (field === "categoryId") item[field] = Number(event.target.value);
+    else if (["quantity", "unitPrice", "amount"].includes(field)) item[field] = this.numberOrNull(event.target.value);
     else item[field] = event.target.value;
-    if (field === "quantity" || field === "unitPrice") {
+    if ((field === "quantity" || field === "unitPrice") && item.quantity !== null && item.unitPrice !== null) {
       item.amount = Math.round(item.quantity * item.unitPrice);
       row.querySelector("[data-field='amount']").value = item.amount;
     }
@@ -140,12 +160,28 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderDifference() {
-    const itemTotal = this.currentItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const calculated = itemTotal - (Number(this.elements.receiptDiscount.value) || 0) + (Number(this.elements.receiptTax.value) || 0);
-    const receiptTotal = Number(this.elements.receiptTotal.value) || 0;
-    const difference = receiptTotal - calculated;
-    this.elements.receiptDifferenceWarning.hidden = Math.abs(difference) < 1;
-    this.elements.receiptDifferenceWarning.textContent = `明細計算 ¥${this.formatMoney(calculated)} と確認済み合計の差額は ¥${this.formatMoney(difference)} です。確認後、そのまま保存できます。`;
+    const amounts = this.currentItems.map((item) => this.numberOrNull(item.amount));
+    const hasAllAmounts = amounts.every((value) => value !== null);
+    const itemTotal = hasAllAmounts ? amounts.reduce((sum, value) => sum + value, 0) : null;
+    const discount = this.numberOrNull(this.elements.receiptDiscount.value) ?? 0;
+    const subtotal = this.numberOrNull(this.elements.receiptSubtotal.value);
+    const externalTax = this.numberOrNull(this.elements.receiptTax.value) ?? 0;
+    const total = this.numberOrNull(this.elements.receiptTotal.value);
+    const messages = [];
+    if (itemTotal === null) messages.push("金額が未入力の商品があるため、商品明細の検算は完了していません。");
+    if (itemTotal !== null && subtotal !== null) {
+      const matchesBeforeDiscount = Math.abs(itemTotal - subtotal) < 1;
+      const matchesAfterDiscount = Math.abs(itemTotal - discount - subtotal) < 1;
+      if (!matchesBeforeDiscount && !matchesAfterDiscount) messages.push(`商品明細 ¥${this.formatMoney(itemTotal)}・値引き ¥${this.formatMoney(discount)} と小計 ¥${this.formatMoney(subtotal)} の関係を確認できません。`);
+    }
+    if (total === null) messages.push("支払合計が未入力のため、合計の検算は完了していません。");
+    else {
+      const candidates = subtotal === null ? (itemTotal === null ? [] : [itemTotal - discount + externalTax]) : [subtotal + externalTax, subtotal - discount + externalTax];
+      if (!candidates.length) messages.push("小計または商品金額が未入力のため、合計の検算は完了していません。");
+      else if (!candidates.some((value) => Math.abs(value - total) < 1)) messages.push(`小計・値引き・外税から支払合計 ¥${this.formatMoney(total)} を確認できません。内税は加算していません。`);
+    }
+    this.elements.receiptDifferenceWarning.hidden = messages.length === 0;
+    this.elements.receiptDifferenceWarning.textContent = `${messages.join(" ")} 確認後、そのまま保存できます。`;
   }
 
   async saveReceipt(event) {
@@ -154,11 +190,14 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const existing = existingId ? await this.manager.db.getReceipt(existingId) : null;
     const result = await this.manager.save({
       ...existing,
+      ...this.currentReceiptMeta,
       id: existingId || undefined,
       storeName: this.elements.receiptStore.value,
       purchasedAt: new Date(this.elements.receiptDate.value).toISOString(),
       items: this.currentItems,
+      subtotal: this.numberOrNull(this.elements.receiptSubtotal.value),
       discount: this.elements.receiptDiscount.value,
+      includedTax: this.numberOrNull(this.elements.receiptIncludedTax.value),
       tax: this.elements.receiptTax.value,
       total: this.elements.receiptTotal.value,
       notes: this.elements.receiptNotes.value,
@@ -267,7 +306,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
         </summary>
         <div class="receipt-history-body">
           <div class="receipt-history-items">
-            ${receipt.items.map((item) => `<div><span>${this.escapeHtml(item.name)} ×${item.quantity}</span><strong>¥${this.formatMoney(item.amount)}</strong></div>`).join("") || `<p class="empty-inline">商品明細なし</p>`}
+            ${receipt.items.map((item) => `<div><span>${this.escapeHtml(item.name)} ×${item.quantity ?? "要確認"}</span><strong>${item.amount === null || item.amount === undefined ? "要確認" : `¥${this.formatMoney(item.amount)}`}</strong></div>`).join("") || `<p class="empty-inline">商品明細なし</p>`}
           </div>
           <div class="receipt-record-actions"><button class="small-button" type="button" data-action="edit-receipt">編集</button><button class="small-button danger" type="button" data-action="delete-receipt">削除</button></div>
         </div>
@@ -284,7 +323,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   renderPriceHistory() {
     const name = this.elements.priceHistoryProduct.value;
     if (!name) { this.elements.priceHistory.innerHTML = `<p class="empty-inline">商品を選ぶと価格推移を表示します。</p>`; return; }
-    const points = (this.receipts || []).flatMap((receipt) => receipt.items.filter((item) => item.name === name).map((item) => ({ date: receipt.purchasedAt, store: receipt.storeName, price: item.unitPrice || item.amount / item.quantity }))).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const points = (this.receipts || []).flatMap((receipt) => receipt.items.filter((item) => item.name === name).map((item) => ({ date: receipt.purchasedAt, store: receipt.storeName, price: item.unitPrice ?? (item.amount !== null && item.quantity ? item.amount / item.quantity : null) })).filter((point) => Number.isFinite(point.price))).sort((a, b) => new Date(a.date) - new Date(b.date));
     const previous = points.at(-2);
     const latest = points.at(-1);
     const change = previous && latest ? latest.price - previous.price : null;
@@ -302,9 +341,18 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   toLocalDateTime(value) {
-    const date = new Date(value || Date.now());
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
     const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
+  }
+
+  inputNumber(value) { return value === null || value === undefined || value === "" ? "" : String(value); }
+  numberOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
 
   localDateKey(value) {
