@@ -10,6 +10,7 @@ window.ShoppingApp.UI = class UI {
     this.purchasedSearch = "";
     this.purchasedCategoryId = "all";
     this.purchasedSort = "recent";
+    this.historyView = "receipts";
     this.receiptUI = null;
     this.pendingBackup = null;
     this.toastTimer = null;
@@ -31,6 +32,8 @@ window.ShoppingApp.UI = class UI {
     this.elements = {
       tabButtons: document.querySelectorAll(".tab-button"),
       tabPanels: document.querySelectorAll(".tab-panel"),
+      historyViewButtons: document.querySelectorAll(".history-view-button"),
+      historyViewPanels: document.querySelectorAll(".history-view"),
       shoppingCountSummary: document.querySelector("#shoppingCountSummary"),
       shoppingList: document.querySelector("#shoppingList"),
       addItemPanel: document.querySelector("#addItemPanel"),
@@ -78,6 +81,9 @@ window.ShoppingApp.UI = class UI {
   bindEvents() {
     this.elements.tabButtons.forEach((button) => {
       button.addEventListener("click", () => this.switchTab(button.dataset.tab));
+    });
+    this.elements.historyViewButtons.forEach((button) => {
+      button.addEventListener("click", () => this.switchHistoryView(button.dataset.historyView));
     });
 
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
@@ -142,8 +148,24 @@ window.ShoppingApp.UI = class UI {
       button.setAttribute("aria-current", isActive ? "page" : "false");
     });
     this.elements.tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tabName));
-    if (tabName === "receipts" && this.receiptUI) this.receiptUI.renderAll();
+    if ((tabName === "receipts" || tabName === "purchased") && this.receiptUI) this.receiptUI.renderAll();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  switchHistoryView(viewName) {
+    this.historyView = viewName;
+    this.elements.historyViewButtons.forEach((button) => {
+      const isActive = button.dataset.historyView === viewName;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", String(isActive));
+      button.tabIndex = isActive ? 0 : -1;
+    });
+    this.elements.historyViewPanels.forEach((panel) => {
+      const isActive = panel.dataset.historyPanel === viewName;
+      panel.classList.toggle("active", isActive);
+      panel.hidden = !isActive;
+    });
+    if (viewName === "receipts" && this.receiptUI) this.receiptUI.renderAll();
   }
 
   isKeyboardInput(element) {
@@ -446,10 +468,7 @@ window.ShoppingApp.UI = class UI {
   }
 
   renderPurchasedList() {
-    const records = this.purchasedManager
-      .getPurchaseRecords()
-      .filter((record) => record.name.toLocaleLowerCase("ja-JP").includes(this.purchasedSearch))
-      .filter((record) => this.purchasedCategoryId === "all" || String(record.categoryId) === this.purchasedCategoryId);
+    const records = this.purchasedManager.getPurchaseRecords();
     this.elements.purchaseRecordCountSummary.textContent = `${records.length}件`;
     this.renderPurchaseRecordGroups(records);
 
@@ -471,10 +490,7 @@ window.ShoppingApp.UI = class UI {
 
   renderPurchaseRecordGroups(records) {
     if (records.length === 0) {
-      const message = this.purchasedSearch || this.purchasedCategoryId !== "all"
-        ? "条件に合う日付付き購入記録はありません。"
-        : "次に「購入」を押した商品から、日付別に記録されます。";
-      this.elements.purchaseRecordList.innerHTML = `<p class="empty-message">${message}</p>`;
+      this.elements.purchaseRecordList.innerHTML = `<p class="empty-message">次に「購入」を押した商品から、日付別に記録されます。</p>`;
       return;
     }
 

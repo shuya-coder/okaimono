@@ -1360,6 +1360,56 @@ dialog::backdrop { background: rgba(12, 24, 19, .48); backdrop-filter: blur(5px)
 }
 
 /* Direct purchase history and iPhone software-keyboard behavior. */
+.history-view-switcher {
+  position: sticky;
+  top: 72px;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.history-view-button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 800;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.history-view-button.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.history-view[hidden] {
+  display: none;
+}
+
+.history-view {
+  animation: history-view-enter .16s ease-out;
+}
+
+@keyframes history-view-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .tab-nav {
   transition: transform .2s ease, opacity .16s ease, box-shadow .18s ease;
 }
@@ -1544,6 +1594,19 @@ body.keyboard-open .app-shell {
 }
 
 @media (max-width: 600px) {
+  .history-view-switcher {
+    top: 64px;
+    gap: 4px;
+    margin-inline: -2px;
+    padding: 5px;
+  }
+
+  .history-view-button {
+    min-height: 48px;
+    padding-inline: 3px;
+    font-size: .76rem;
+  }
+
   body.keyboard-open .app-shell {
     padding-bottom: 24px;
   }

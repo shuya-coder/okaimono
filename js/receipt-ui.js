@@ -1,10 +1,11 @@
 window.ShoppingApp = window.ShoppingApp || {};
 
 window.ShoppingApp.ReceiptUI = class ReceiptUI {
-  constructor({ receiptManager, categoryManager, showToast }) {
+  constructor({ receiptManager, categoryManager, showToast, showReceiptEditor }) {
     this.manager = receiptManager;
     this.categoryManager = categoryManager;
     this.showToast = showToast;
+    this.showReceiptEditor = showReceiptEditor;
     this.currentItems = [];
     this.currentReceiptMeta = {};
     this.pendingImportCandidates = [];
@@ -78,6 +79,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     try {
       const analysis = await this.manager.analyzeChatGptInput(this.elements.chatGptReceiptJson.value);
       this.renderImportPreview(analysis);
+      this.elements.chatGptReceiptJson.value = "";
     } catch (error) {
       this.showImportError(error);
     }
@@ -336,7 +338,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const id = row.dataset.receiptId;
     if (event.target.closest("[data-action='edit-receipt']")) {
       const receipt = await this.manager.db.getReceipt(id);
-      if (receipt) this.openEditor(receipt);
+      if (receipt) {
+        this.showReceiptEditor?.();
+        this.openEditor(receipt);
+      }
     }
     if (event.target.closest("[data-action='delete-receipt']")) {
       if (!confirm("このレシート記録を削除しますか？買い物リストや購入履歴には影響しません。")) return;

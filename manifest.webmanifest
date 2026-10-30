@@ -2,7 +2,7 @@
   "name": "買い物リスト",
   "short_name": "買い物",
   "description": "片手で使いやすいシンプルな買い物リスト",
-  "start_url": "./?v=4.0.1",
+  "start_url": "./?v=4.1.1",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7f9fc",

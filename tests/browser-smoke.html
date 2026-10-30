@@ -22,7 +22,8 @@
     report("既存カートを買い物リストへ安全に移行", doc.querySelector("#shoppingList").textContent.includes("残す商品") && doc.querySelector("#shoppingList").textContent.includes("カゴ商品") && !doc.querySelector("#basketPanel") && runtime.shoppingManager.getCartItems().length === 0 && runtime.shoppingManager.getListItems().find((item) => item.name === "残す商品")?.count === 5);
     report("既存の累計購入商品を保持", doc.querySelector("#purchasedList").textContent.includes("過去商品") && runtime.purchasedManager.getAll().find((item) => item.name === "過去商品")?.purchaseCount === 2);
     report("購入日不明データへ架空の日付を付けない", runtime.purchasedManager.getAll().find((item) => item.name === "日付不明商品")?.lastPurchasedAt === null && doc.querySelector("#purchasedList").textContent.includes("購入日不明"));
-    report("4タブ構成", [...doc.querySelectorAll(".tab-button span")].map((node) => node.textContent).join(",") === "買い物,レシート,購入履歴,設定");
+    report("4タブ構成と履歴名称", [...doc.querySelectorAll(".tab-button span")].map((node) => node.textContent).join(",") === "買い物,レシート,履歴,設定");
+    report("履歴画面に3つの切り替えを表示", [...doc.querySelectorAll(".history-view-button")].map((node) => node.textContent.trim()).join(",") === "レシート履歴,最近の購入履歴,購入記録" && doc.querySelector("#receiptList").closest("[data-panel]")?.dataset.panel === "purchased" && !doc.querySelector("[data-panel='receipts'] #receiptList"));
     report("390px幅でChatGPTコピー・貼り付け・ファイルUIが横にはみ出さない", doc.documentElement.scrollWidth <= doc.documentElement.clientWidth && doc.querySelector("#copyChatGptPromptButton") && doc.querySelector("#chatGptReceiptJson") && doc.querySelector("#pasteClipboardButton") && doc.querySelector("#chatGptJsonFileInput") && doc.querySelector("#importChatGptJsonButton"));
     doc.querySelector("#addItemPanel").open = true;
     doc.querySelector("#itemName").value = "連続追加商品";
@@ -52,6 +53,11 @@
     report("購入でリストから除外して日付付き記録を保存", !runtime.shoppingManager.getListItems().some((item) => item.name === "カゴ商品") && purchaseRecord.name === "カゴ商品" && purchaseRecord.count === 1 && Boolean(purchaseRecord.purchasedAt));
     report("購入回数を一度だけ加算", runtime.purchasedManager.getAll().find((item) => item.name === "カゴ商品")?.purchaseCount === 1);
     report("購入履歴を日付別の折りたたみで表示", doc.querySelectorAll("#purchaseRecordList .history-day").length === 1 && doc.querySelector("#purchaseRecordList").textContent.includes("カゴ商品") && doc.querySelector("#purchaseRecordList [data-action='rebuy-record']"));
+    runtime.ui.switchTab("purchased");
+    runtime.ui.switchHistoryView("recent");
+    report("最近の購入履歴だけを切り替え表示", !doc.querySelector("#recentHistoryView").hidden && doc.querySelector("#receiptHistoryView").hidden && doc.querySelector("#productHistoryView").hidden && doc.querySelector("#recentHistoryView").textContent.includes("カゴ商品"));
+    runtime.ui.switchHistoryView("products");
+    report("購入記録に累計回数・最終購入日・並び替えを維持", !doc.querySelector("#productHistoryView").hidden && doc.querySelector("#productHistoryView").textContent.includes("購入 1回") && doc.querySelector("#productHistoryView").textContent.includes("最終購入") && doc.querySelector("#purchasedSort option[value='frequent']"));
 
     doc.querySelector("#manualReceiptButton").click();
     doc.querySelector("#receiptStore").value = "テスト店";
@@ -71,7 +77,13 @@
     report("レシート登録で購入回数を二重計上しない", !runtime.purchasedManager.getAll().some((item) => item.name === "牛乳") && runtime.purchasedManager.getPurchaseRecords().length === 1);
     report("画像を永続保存しない", !JSON.stringify(stored).includes("data:image"));
     report("月次集計", doc.querySelector("#monthlySpend").textContent.includes("1,000"));
+    runtime.ui.switchHistoryView("receipts");
     report("レシート履歴を日付別に折りたたみ表示", doc.querySelectorAll("#receiptList .receipt-day").length === 1 && doc.querySelector("#receiptList").textContent.includes("テスト店") && doc.querySelector("#receiptList").textContent.includes("1,000"));
+    report("レシート履歴だけを履歴画面で表示", !doc.querySelector("#receiptHistoryView").hidden && doc.querySelector("#recentHistoryView").hidden && doc.querySelector("#productHistoryView").hidden && doc.querySelector("[data-panel='receipts'] #dailySpend"));
+    doc.querySelector("#receiptList [data-action='edit-receipt']").click();
+    await waitFor(() => doc.querySelector("[data-panel='receipts']").classList.contains("active") && !doc.querySelector("#receiptEditor").hidden);
+    report("履歴からレシート編集を開くと登録画面へ移動", doc.querySelector("#receiptStore").value === "テスト店" && doc.querySelector("[data-panel='receipts']").classList.contains("active"));
+    runtime.receiptUI.closeEditor();
     runtime.receiptUI.openEditor(stored); doc.querySelector("#receiptTotal").value = "1100"; runtime.receiptUI.currentItems[0].amount = 1100; doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
     await waitFor(async () => (await runtime.receiptManager.getAll())[0]?.total === 1100);
     report("レシート編集", (await runtime.receiptManager.getAll())[0].total === 1100);
@@ -97,10 +109,10 @@
     doc.querySelector("#chatGptReceiptJson").value = JSON.stringify(shimamuraJson);
     doc.querySelector("#importChatGptJsonButton").click();
     await waitFor(() => !doc.querySelector("#chatGptImportPreview").hidden);
-    report("読み込み結果を保存前にプレビュー", doc.querySelectorAll("#chatGptImportCandidates .json-candidate-card").length === 1 && doc.querySelector("#chatGptImportCandidates").textContent.includes("しまむら宮野木店") && doc.querySelector("#chatGptReceiptJson").value.includes("しまむら宮野木店"));
+    report("正常なJSONを読み込むと入力欄だけを自動クリア", doc.querySelectorAll("#chatGptImportCandidates .json-candidate-card").length === 1 && doc.querySelector("#chatGptImportCandidates").textContent.includes("しまむら宮野木店") && doc.querySelector("#chatGptReceiptJson").value === "");
     doc.querySelector("#confirmChatGptImportButton").click();
     await waitFor(() => doc.querySelectorAll("#receiptItemsEditor .receipt-item-editor").length === 10);
-    report("プレビュー確認後に10商品の編集欄を展開", doc.querySelector("#receiptStore").value === "しまむら宮野木店" && doc.querySelector("#receiptSubtotal").value === "11990" && doc.querySelector("#receiptDiscount").value === "100" && doc.querySelector("#receiptTotal").value === "11890" && doc.querySelector("#receiptDifferenceWarning").hidden && doc.querySelector("#chatGptReceiptJson").value.includes("しまむら宮野木店"));
+    report("入力欄クリア後も10商品の確認・編集内容を保持", doc.querySelector("#receiptStore").value === "しまむら宮野木店" && doc.querySelector("#receiptSubtotal").value === "11990" && doc.querySelector("#receiptDiscount").value === "100" && doc.querySelector("#receiptTotal").value === "11890" && doc.querySelector("#receiptDifferenceWarning").hidden && doc.querySelector("#chatGptReceiptJson").value === "");
 
     const lifeJson = {
       schemaVersion: "okaimono-receipt-v1", storeName: "ライフ 宮野木店", purchasedAt: "2026-10-29T12:31:00+09:00",
@@ -127,7 +139,7 @@
     runtime.receiptUI.closeEditor();
     const jsonFile = new win.File([JSON.stringify(shimamuraJson)], "receipt.json", { type:"application/json" });
     await runtime.receiptUI.loadJsonFile({ target:{ files:[jsonFile], value:"selected" } });
-    report("UTF-8 JSONファイルを読み込みプレビュー", doc.querySelector("#jsonFileName").textContent.includes("receipt.json") && doc.querySelector("#chatGptReceiptJson").value.includes("しまむら宮野木店") && !doc.querySelector("#chatGptImportPreview").hidden);
+    report("UTF-8 JSONファイルを読み込みプレビュー後に入力欄をクリア", doc.querySelector("#jsonFileName").textContent.includes("receipt.json") && doc.querySelector("#chatGptReceiptJson").value === "" && !doc.querySelector("#chatGptImportPreview").hidden);
     runtime.receiptUI.clearImportPreview();
     const savedLife = await runtime.receiptManager.save({ ...life, id: "life-json-regression" });
     await runtime.receiptUI.renderAll();
@@ -196,8 +208,8 @@
     report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v4.0.1");
-    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.0.1"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
+    const cache = await win.caches.open("shopping-app-v4.1.1");
+    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.1.1"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
     report("新しい取り込み機能をオフラインキャッシュしOCR資産を除外", Boolean(managerScript) && !oldTesseract);
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
     report("不要な外部通信なし", foreign.length === 0, foreign.join(", "));

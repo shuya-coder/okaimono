@@ -1,4 +1,4 @@
-const APP_VERSION = "4.0.1";
+const APP_VERSION = "4.1.1";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const { Storage, CategoryManager, ShoppingManager, PurchasedManager, ReceiptDB, ReceiptManager, ReceiptUI, UI } = window.ShoppingApp;
@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     receiptManager,
     categoryManager,
     showToast: (message) => ui.showToast(message),
+    showReceiptEditor: () => ui.switchTab("receipts"),
   });
   ui.receiptUI = receiptUI;
   window.ShoppingApp.runtime = { storage, categoryManager, shoppingManager, purchasedManager, receiptDB, receiptManager, receiptUI, ui };
