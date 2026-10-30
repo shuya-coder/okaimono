@@ -10,6 +10,8 @@ window.ShoppingApp.UI = class UI {
     this.purchasedSearch = "";
     this.purchasedCategoryId = "all";
     this.purchasedSort = "recent";
+    const savedActiveTab = this.storage.get("activeTab", "shopping");
+    this.activeTab = ["shopping", "receipts", "purchased", "settings"].includes(savedActiveTab) ? savedActiveTab : "shopping";
     const savedHistoryView = this.storage.get("historyView", "recent");
     this.historyView = ["receipts", "recent", "products"].includes(savedHistoryView) ? savedHistoryView : "recent";
     this.receiptUI = null;
@@ -35,6 +37,7 @@ window.ShoppingApp.UI = class UI {
     this.applyTheme(this.storage.get("darkMode", false));
     this.elements.appVersion.textContent = this.version;
     this.renderAll();
+    this.switchTab(this.activeTab, { persist: false, scroll: false });
     this.elements.addItemPanel.open = this.shoppingManager.getListItems().length === 0;
     this.switchHistoryView(this.historyView, { persist: false });
   }
@@ -173,7 +176,10 @@ window.ShoppingApp.UI = class UI {
     });
   }
 
-  switchTab(tabName) {
+  switchTab(tabName, { persist = true, scroll = true } = {}) {
+    if (!["shopping", "receipts", "purchased", "settings"].includes(tabName)) tabName = "shopping";
+    this.activeTab = tabName;
+    if (persist) this.storage.set("activeTab", tabName);
     this.elements.tabButtons.forEach((button) => {
       const isActive = button.dataset.tab === tabName;
       button.classList.toggle("active", isActive);
@@ -181,7 +187,7 @@ window.ShoppingApp.UI = class UI {
     });
     this.elements.tabPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tabName));
     if ((tabName === "receipts" || tabName === "purchased") && this.receiptUI) this.receiptUI.renderAll();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (scroll) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   switchHistoryView(viewName, { persist = true } = {}) {
@@ -606,14 +612,14 @@ window.ShoppingApp.UI = class UI {
     });
     this.elements.purchaseRecordList.innerHTML = [...groups.entries()]
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([dateKey, items], index) => this.createPurchaseDateGroup(dateKey, items, index === 0))
+      .map(([dateKey, items]) => this.createPurchaseDateGroup(dateKey, items))
       .join("");
   }
 
-  createPurchaseDateGroup(dateKey, records, open) {
+  createPurchaseDateGroup(dateKey, records) {
     const totalCount = records.reduce((sum, record) => sum + record.count, 0);
     return `
-      <details class="history-day" ${open ? "open" : ""}>
+      <details class="history-day">
         <summary>
           <span><strong>${this.formatDateHeader(dateKey)}</strong><small>${records.length}商品・合計${totalCount}点</small></span>
           <span class="chevron" aria-hidden="true">⌄</span>

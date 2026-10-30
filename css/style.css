@@ -931,7 +931,7 @@ dialog::backdrop {
 .monthly-spend-card strong { font-size: clamp(2rem, 10vw, 3.4rem); line-height: 1.05; }
 .monthly-spend-card.history-monthly-spend { grid-template-columns: 1fr; }
 .history-monthly-spend p, .history-monthly-spend strong { grid-column: 1; }
-.analysis-month-label { display: grid; gap: 6px; max-width: 190px; margin-bottom: 14px; }
+.section-period-label { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; font-weight: 750; }
 .privacy-badge, .review-badge { padding: 4px 9px; border-radius: 999px; background: #e8f7ed; color: #18723a; font-size: .78rem; font-weight: 900; }
 .review-badge { background: #fff1cf; color: #8a5a00; }
 .receipt-import-actions, .json-input-actions, .receipt-search-row, .receipt-fields, .analytics-grid { display: grid; gap: 10px; }

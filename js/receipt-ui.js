@@ -10,25 +10,24 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.currentReceiptMeta = {};
     this.pendingImportCandidates = [];
     this.search = "";
-    this.monthFilter = "all";
+    this.monthFilter = "";
+    this.monthFilterInitialized = false;
+    this.monthFilterUserSelected = false;
     this.elements = {};
   }
 
   async init() {
     this.cacheElements();
     this.bindEvents();
-    const month = this.localMonthKey();
-    this.elements.receiptMonth.value = month;
     await this.renderAll();
   }
 
   cacheElements() {
-    const ids = ["receiptMonth", "monthlySpend", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
   bindEvents() {
-    this.elements.receiptMonth.addEventListener("change", () => this.renderAll());
     this.elements.copyChatGptPromptButton.addEventListener("click", () => this.copyChatGptPrompt());
     this.elements.pasteClipboardButton.addEventListener("click", () => this.pasteFromClipboard());
     this.elements.chatGptJsonFileInput.addEventListener("change", (event) => this.loadJsonFile(event));
@@ -45,7 +44,12 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.receiptForm.addEventListener("submit", (event) => this.saveReceipt(event));
     this.elements.cancelReceiptButton.addEventListener("click", () => this.closeEditor());
     this.elements.receiptSearch.addEventListener("input", (event) => { this.search = event.target.value.trim().toLocaleLowerCase("ja-JP"); this.renderReceiptList(); });
-    this.elements.receiptMonthFilter.addEventListener("change", (event) => { this.monthFilter = event.target.value; this.renderReceiptList(); });
+    this.elements.receiptMonthFilter.addEventListener("change", (event) => {
+      this.monthFilter = event.target.value;
+      this.monthFilterUserSelected = true;
+      this.renderSummary();
+      this.renderReceiptList();
+    });
     this.elements.receiptList.addEventListener("click", (event) => this.handleReceiptAction(event));
     this.elements.priceHistoryProduct.addEventListener("change", () => this.renderPriceHistory());
   }
@@ -363,21 +367,29 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderMonthOptions() {
-    const months = [...new Set(this.receipts.map((receipt) => receipt.purchasedAt.slice(0, 7)))].sort().reverse();
-    const value = this.elements.receiptMonthFilter.value || this.monthFilter;
-    this.elements.receiptMonthFilter.innerHTML = `<option value="all">すべて</option>${months.map((month) => `<option value="${month}">${this.escapeHtml(month)}</option>`).join("")}`;
-    this.elements.receiptMonthFilter.value = months.includes(value) ? value : "all";
-    this.monthFilter = this.elements.receiptMonthFilter.value;
+    const months = [...new Set(this.receipts.map((receipt) => this.localMonthKey(receipt.purchasedAt)))].sort().reverse();
+    const currentMonth = this.localMonthKey();
+    let selectedMonth = this.monthFilterInitialized ? this.monthFilter : "";
+    if (!this.monthFilterUserSelected && selectedMonth === "all" && months.length) selectedMonth = "";
+    if (selectedMonth !== "all" && !months.includes(selectedMonth)) {
+      selectedMonth = months.includes(currentMonth) ? currentMonth : (months[0] || "all");
+    }
+    this.elements.receiptMonthFilter.innerHTML = `<option value="all">すべて</option>${months.map((month) => `<option value="${month}">${this.escapeHtml(this.formatMonthLabel(month))}</option>`).join("")}`;
+    this.elements.receiptMonthFilter.value = selectedMonth;
+    this.monthFilter = selectedMonth;
+    this.monthFilterInitialized = true;
   }
 
   renderSummary() {
-    const currentMonth = this.localMonthKey();
-    const currentMonthReceipts = this.receipts.filter((receipt) => this.localMonthKey(receipt.purchasedAt) === currentMonth);
-    this.elements.monthlySpend.textContent = `¥${this.formatMoney(currentMonthReceipts.reduce((sum, receipt) => sum + receipt.total, 0))}`;
-    const month = this.elements.receiptMonth.value || currentMonth;
-    const receipts = this.receipts.filter((receipt) => this.localMonthKey(receipt.purchasedAt) === month);
+    const receipts = this.receiptsForSelectedMonth();
+    const allMonths = this.monthFilter === "all";
+    const periodLabel = allMonths ? "すべての期間" : this.formatMonthLabel(this.monthFilter);
+    this.elements.monthlySpendLabel.textContent = allMonths ? "すべての支出" : "選択月の支出";
+    this.elements.monthlySpend.textContent = `¥${this.formatMoney(receipts.reduce((sum, receipt) => sum + receipt.total, 0))}`;
+    this.elements.monthlySpend.closest(".monthly-spend-card")?.setAttribute("aria-label", `${periodLabel}の支出`);
+    this.elements.analysisPeriodLabel.textContent = `${periodLabel}・レシート履歴と連動`;
     this.elements.receiptRecordCount.textContent = `${receipts.length}件`;
-    this.renderGroupedSummary(this.elements.dailySpend, receipts, (receipt) => receipt.purchasedAt.slice(5, 10).replace("-", "/"));
+    this.renderGroupedSummary(this.elements.dailySpend, receipts, (receipt) => this.localDateKey(receipt.purchasedAt).slice(5).replace("-", "/"));
     this.renderGroupedSummary(this.elements.storeSpend, receipts, (receipt) => receipt.storeName || "店舗不明");
     const categoryTotals = new Map();
     receipts.flatMap((receipt) => receipt.items).forEach((item) => categoryTotals.set(item.categoryId, (categoryTotals.get(item.categoryId) || 0) + item.amount));
@@ -399,7 +411,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   renderReceiptList() {
     const filtered = (this.receipts || []).filter((receipt) => {
       const searchable = `${receipt.storeName} ${receipt.items.map((item) => item.name).join(" ")}`.toLocaleLowerCase("ja-JP");
-      return searchable.includes(this.search) && (this.monthFilter === "all" || receipt.purchasedAt.startsWith(this.monthFilter));
+      return searchable.includes(this.search) && (this.monthFilter === "all" || this.localMonthKey(receipt.purchasedAt) === this.monthFilter);
     });
     if (!filtered.length) { this.elements.receiptList.innerHTML = `<p class="empty-message">レシート記録はありません。</p>`; return; }
     const groups = new Map();
@@ -492,6 +504,19 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
 
   localMonthKey(value = new Date()) {
     return this.localDateKey(value).slice(0, 7);
+  }
+
+  receiptsForSelectedMonth() {
+    const receipts = this.receipts || [];
+    return this.monthFilter === "all"
+      ? receipts
+      : receipts.filter((receipt) => this.localMonthKey(receipt.purchasedAt) === this.monthFilter);
+  }
+
+  formatMonthLabel(monthKey) {
+    const [year, month] = String(monthKey || "").split("-");
+    if (!year || !month) return "月不明";
+    return `${Number(year)}年${Number(month)}月`;
   }
 
   formatDateHeader(dateKey) { return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(`${dateKey}T00:00:00`)); }

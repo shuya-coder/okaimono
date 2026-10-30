@@ -9,10 +9,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.4.0">
+  <link rel="manifest" href="manifest.webmanifest?v=4.6.0">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=4.4.0">
+  <link rel="stylesheet" href="css/style.css?v=4.6.0">
 </head>
 <body>
   <div class="app-shell">
@@ -49,7 +49,7 @@
           <div class="section-title"><h2 id="receiptEditorTitle">レシート内容の確認</h2><span id="receiptReviewBadge" class="review-badge" hidden>要確認</span></div>
           <form id="receiptForm" class="form-stack"><input id="receiptId" type="hidden"><div class="receipt-fields"><label>店舗名<input id="receiptStore" type="text" required></label><label>購入日時<input id="receiptDate" type="datetime-local" required></label><label>レシート記載の小計・商品合計<input id="receiptSubtotal" type="number" inputmode="numeric" min="0" step="1"></label><label>割引額<input id="receiptDiscount" type="number" inputmode="numeric" min="0" step="1"></label><label>内税額（合計へ加算しない）<input id="receiptIncludedTax" type="number" inputmode="numeric" min="0" step="1"></label><label>外税額<input id="receiptTax" type="number" inputmode="numeric" min="0" step="1"></label><label>確認した支払合計<input id="receiptTotal" type="number" inputmode="numeric" min="0" step="1" required></label></div><div class="section-title"><h3>商品明細</h3><button id="addReceiptItemButton" class="secondary-button compact-button" type="button">＋ 明細</button></div><div id="receiptItemsEditor" class="receipt-items-editor"></div><div id="receiptDifferenceWarning" class="warning-message" hidden></div><label>メモ<textarea id="receiptNotes" rows="2"></textarea></label><details><summary>解析元データを確認</summary><pre id="receiptRawText" class="analysis-raw-text"></pre></details><div class="dialog-actions"><button id="cancelReceiptButton" class="secondary-button" type="button">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form>
         </section>
-        <section class="card"><div class="section-title"><h2>支出の内訳</h2><span id="receiptRecordCount" class="badge">0件</span></div><label class="analysis-month-label" for="receiptMonth">分析対象月<input id="receiptMonth" type="month"></label><div class="analytics-grid"><div><h3>日別</h3><div id="dailySpend" class="summary-list"></div></div><div><h3>店舗別</h3><div id="storeSpend" class="summary-list"></div></div><div><h3>カテゴリ別</h3><div id="categorySpend" class="summary-list"></div></div></div></section>
+        <section class="card"><div class="section-title"><div><h2>支出の内訳</h2><small id="analysisPeriodLabel" class="section-period-label">レシート履歴で選択した月</small></div><span id="receiptRecordCount" class="badge">0件</span></div><div class="analytics-grid"><div><h3>日別</h3><div id="dailySpend" class="summary-list"></div></div><div><h3>店舗別</h3><div id="storeSpend" class="summary-list"></div></div><div><h3>カテゴリ別</h3><div id="categorySpend" class="summary-list"></div></div></div></section>
         <section class="card"><div class="section-title"><h2>価格推移</h2></div><label>商品<select id="priceHistoryProduct"><option value="">商品を選択</option></select></label><div id="priceHistory" class="price-history"></div></section>
       </section>
 
@@ -60,7 +60,7 @@
           <button id="productHistoryViewButton" class="history-view-button" type="button" role="tab" data-history-view="products" aria-controls="productHistoryView" aria-selected="false">商品別</button>
         </div>
         <section id="receiptHistoryView" class="history-view" role="tabpanel" aria-labelledby="receiptHistoryViewButton" data-history-panel="receipts" hidden>
-          <section class="monthly-spend-card history-monthly-spend" aria-label="今月の支出"><p>今月の支出</p><strong id="monthlySpend">¥0</strong></section>
+          <section class="monthly-spend-card history-monthly-spend" aria-label="選択月の支出"><p id="monthlySpendLabel">選択月の支出</p><strong id="monthlySpend">¥0</strong></section>
           <div class="history-section-heading"><div><p class="eyebrow">レシート別</p><h2>レシート履歴</h2></div></div>
           <div class="receipt-search-row"><label>レシート検索<input id="receiptSearch" type="search" placeholder="店舗名・商品名"></label><label>月<select id="receiptMonthFilter"><option value="all">すべて</option></select></label></div>
           <div id="receiptList" class="receipt-list" aria-live="polite"></div>
@@ -86,6 +86,6 @@
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"><span id="toastMessage"></span><button id="toastUndoButton" class="toast-undo-button" type="button" hidden>元に戻す</button></div>
-  <script src="js/storage.js?v=4.4.0"></script><script src="js/category.js?v=4.4.0"></script><script src="js/shopping.js?v=4.4.0"></script><script src="js/history.js?v=4.4.0"></script><script src="js/receipt-db.js?v=4.4.0"></script><script src="js/receipt-manager.js?v=4.4.0"></script><script src="js/receipt-ui.js?v=4.4.0"></script><script src="js/ui.js?v=4.4.0"></script><script src="js/app.js?v=4.4.0"></script>
+  <script src="js/storage.js?v=4.6.0"></script><script src="js/category.js?v=4.6.0"></script><script src="js/shopping.js?v=4.6.0"></script><script src="js/history.js?v=4.6.0"></script><script src="js/receipt-db.js?v=4.6.0"></script><script src="js/receipt-manager.js?v=4.6.0"></script><script src="js/receipt-ui.js?v=4.6.0"></script><script src="js/ui.js?v=4.6.0"></script><script src="js/app.js?v=4.6.0"></script>
 </body>
 </html>
