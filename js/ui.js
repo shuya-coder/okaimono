@@ -15,6 +15,8 @@ window.ShoppingApp.UI = class UI {
     this.pendingBackup = null;
     this.toastTimer = null;
     this.keyboardTimer = null;
+    this.isComposingItemName = false;
+    this.pendingAddAfterComposition = false;
     this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
     this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
     this.elements = {};
@@ -89,7 +91,10 @@ window.ShoppingApp.UI = class UI {
     this.elements.shoppingList.addEventListener("click", (event) => this.handleListAction(event));
 
     this.elements.addItemForm.addEventListener("submit", (event) => this.handleAddItem(event));
+    this.elements.itemName.addEventListener("compositionstart", () => this.handleItemCompositionStart());
+    this.elements.itemName.addEventListener("compositionend", () => this.handleItemCompositionEnd());
     this.elements.addItemButton.addEventListener("touchstart", (event) => {
+      if (this.isComposingItemName) return;
       event.preventDefault();
       this.elements.addItemForm.requestSubmit();
     }, { passive: false });
@@ -189,17 +194,12 @@ window.ShoppingApp.UI = class UI {
   handleKeyboardBlur() {
     window.clearTimeout(this.keyboardTimer);
     this.keyboardTimer = window.setTimeout(() => {
-      if (!this.isKeyboardInput(document.activeElement)) {
-        document.body.classList.remove("keyboard-open");
-        this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
-        this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
-      }
+      this.updateKeyboardState();
     }, 120);
   }
 
   updateKeyboardState() {
     const viewport = window.visualViewport;
-    const activeInput = this.isKeyboardInput(document.activeElement);
     if (!viewport || window.innerWidth > 760) {
       document.body.classList.remove("keyboard-open");
       return;
@@ -210,18 +210,19 @@ window.ShoppingApp.UI = class UI {
       document.body.classList.remove("keyboard-open");
       return;
     }
-    if (!activeInput) {
-      document.body.classList.remove("keyboard-open");
-      this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
-      return;
-    }
     const keyboardVisible = this.viewportMaxHeight - viewport.height > 120;
     document.body.classList.toggle("keyboard-open", keyboardVisible);
-    if (keyboardVisible) this.ensureFocusedFieldVisible();
-    else this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
+    if (keyboardVisible) {
+      if (this.isKeyboardInput(document.activeElement) && !this.isComposingItemName) {
+        this.ensureFocusedFieldVisible();
+      }
+    } else {
+      this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
+    }
   }
 
   ensureFocusedFieldVisible() {
+    if (this.isComposingItemName) return;
     const field = document.activeElement;
     if (!this.isKeyboardInput(field)) return;
     const viewport = window.visualViewport;
@@ -235,6 +236,10 @@ window.ShoppingApp.UI = class UI {
 
   handleAddItem(event) {
     event.preventDefault();
+    if (this.isComposingItemName) {
+      this.pendingAddAfterComposition = true;
+      return;
+    }
     const selectedCategoryId = this.elements.itemCategory.value;
     const item = this.shoppingManager.add({
       name: this.elements.itemName.value,
@@ -245,6 +250,24 @@ window.ShoppingApp.UI = class UI {
 
     this.prepareContinuousAdd(selectedCategoryId);
     this.renderShoppingList();
+  }
+
+  handleItemCompositionStart() {
+    this.isComposingItemName = true;
+    window.clearTimeout(this.keyboardTimer);
+  }
+
+  handleItemCompositionEnd() {
+    this.isComposingItemName = false;
+    if (this.pendingAddAfterComposition) {
+      this.pendingAddAfterComposition = false;
+      queueMicrotask(() => this.elements.addItemForm.requestSubmit());
+      return;
+    }
+    requestAnimationFrame(() => {
+      this.updateKeyboardState();
+      this.ensureFocusedFieldVisible();
+    });
   }
 
   prepareContinuousAdd(selectedCategoryId) {

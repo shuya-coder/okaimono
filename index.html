@@ -9,10 +9,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.1.3">
+  <link rel="manifest" href="manifest.webmanifest?v=4.1.4">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=4.1.3">
+  <link rel="stylesheet" href="css/style.css?v=4.1.4">
 </head>
 <body>
   <div class="app-shell">
@@ -86,6 +86,6 @@
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="js/storage.js?v=4.1.3"></script><script src="js/category.js?v=4.1.3"></script><script src="js/shopping.js?v=4.1.3"></script><script src="js/history.js?v=4.1.3"></script><script src="js/receipt-db.js?v=4.1.3"></script><script src="js/receipt-manager.js?v=4.1.3"></script><script src="js/receipt-ui.js?v=4.1.3"></script><script src="js/ui.js?v=4.1.3"></script><script src="js/app.js?v=4.1.3"></script>
+  <script src="js/storage.js?v=4.1.4"></script><script src="js/category.js?v=4.1.4"></script><script src="js/shopping.js?v=4.1.4"></script><script src="js/history.js?v=4.1.4"></script><script src="js/receipt-db.js?v=4.1.4"></script><script src="js/receipt-manager.js?v=4.1.4"></script><script src="js/receipt-ui.js?v=4.1.4"></script><script src="js/ui.js?v=4.1.4"></script><script src="js/app.js?v=4.1.4"></script>
 </body>
 </html>
