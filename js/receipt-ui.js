@@ -17,7 +17,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   async init() {
     this.cacheElements();
     this.bindEvents();
-    const month = new Date().toISOString().slice(0, 7);
+    const month = this.localMonthKey();
     this.elements.receiptMonth.value = month;
     await this.renderAll();
   }
@@ -369,9 +369,11 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderSummary() {
-    const month = this.elements.receiptMonth.value || new Date().toISOString().slice(0, 7);
-    const receipts = this.receipts.filter((receipt) => receipt.purchasedAt.startsWith(month));
-    this.elements.monthlySpend.textContent = `¥${this.formatMoney(receipts.reduce((sum, receipt) => sum + receipt.total, 0))}`;
+    const currentMonth = this.localMonthKey();
+    const currentMonthReceipts = this.receipts.filter((receipt) => this.localMonthKey(receipt.purchasedAt) === currentMonth);
+    this.elements.monthlySpend.textContent = `¥${this.formatMoney(currentMonthReceipts.reduce((sum, receipt) => sum + receipt.total, 0))}`;
+    const month = this.elements.receiptMonth.value || currentMonth;
+    const receipts = this.receipts.filter((receipt) => this.localMonthKey(receipt.purchasedAt) === month);
     this.elements.receiptRecordCount.textContent = `${receipts.length}件`;
     this.renderGroupedSummary(this.elements.dailySpend, receipts, (receipt) => receipt.purchasedAt.slice(5, 10).replace("-", "/"));
     this.renderGroupedSummary(this.elements.storeSpend, receipts, (receipt) => receipt.storeName || "店舗不明");
@@ -484,6 +486,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
     const get = (type) => parts.find((part) => part.type === type)?.value;
     return `${get("year")}-${get("month")}-${get("day")}`;
+  }
+
+  localMonthKey(value = new Date()) {
+    return this.localDateKey(value).slice(0, 7);
   }
 
   formatDateHeader(dateKey) { return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(`${dateKey}T00:00:00`)); }

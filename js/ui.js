@@ -19,6 +19,8 @@ window.ShoppingApp.UI = class UI {
     this.pendingAddAfterComposition = false;
     this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
     this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
+    this.viewportLastHeight = this.viewportMaxHeight;
+    this.keyboardOpen = false;
     this.elements = {};
   }
 
@@ -135,12 +137,15 @@ window.ShoppingApp.UI = class UI {
 
     document.addEventListener("focusin", (event) => this.handleKeyboardFocus(event));
     document.addEventListener("focusout", () => this.handleKeyboardBlur());
-    window.visualViewport?.addEventListener("resize", () => this.updateKeyboardState());
-    window.visualViewport?.addEventListener("scroll", () => this.ensureFocusedFieldVisible());
+    window.visualViewport?.addEventListener("resize", () => this.scheduleKeyboardStateUpdate());
+    window.visualViewport?.addEventListener("scroll", () => this.scheduleKeyboardStateUpdate());
+    window.addEventListener("resize", () => this.scheduleKeyboardStateUpdate());
     window.addEventListener("orientationchange", () => {
       window.setTimeout(() => {
         this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
         this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
+        this.viewportLastHeight = this.viewportMaxHeight;
+        this.keyboardOpen = false;
         document.body.classList.remove("keyboard-open");
       }, 300);
     });
@@ -182,43 +187,61 @@ window.ShoppingApp.UI = class UI {
 
   handleKeyboardFocus(event) {
     if (!this.isKeyboardInput(event.target) || window.innerWidth > 760) return;
-    window.clearTimeout(this.keyboardTimer);
-    this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
-    this.updateKeyboardState();
-    this.keyboardTimer = window.setTimeout(() => {
-      this.updateKeyboardState();
-      this.ensureFocusedFieldVisible();
-    }, 180);
+    if (!this.keyboardOpen) {
+      this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
+    }
+    this.scheduleKeyboardStateUpdate();
   }
 
   handleKeyboardBlur() {
+    this.scheduleKeyboardStateUpdate();
+  }
+
+  scheduleKeyboardStateUpdate() {
     window.clearTimeout(this.keyboardTimer);
-    this.keyboardTimer = window.setTimeout(() => {
-      this.updateKeyboardState();
-    }, 120);
+    this.updateKeyboardState();
+    requestAnimationFrame(() => this.updateKeyboardState());
+    this.keyboardTimer = window.setTimeout(() => this.updateKeyboardState(), 280);
   }
 
   updateKeyboardState() {
     const viewport = window.visualViewport;
     if (!viewport || window.innerWidth > 760) {
+      this.keyboardOpen = false;
       document.body.classList.remove("keyboard-open");
       return;
     }
     if (Math.abs(viewport.width - this.viewportBaselineWidth) > 60) {
       this.viewportBaselineWidth = viewport.width;
       this.viewportMaxHeight = viewport.height;
+      this.viewportLastHeight = viewport.height;
+      this.keyboardOpen = false;
       document.body.classList.remove("keyboard-open");
       return;
     }
-    const keyboardVisible = this.viewportMaxHeight - viewport.height > 120;
-    document.body.classList.toggle("keyboard-open", keyboardVisible);
-    if (keyboardVisible) {
+
+    const heightLoss = Math.max(0, this.viewportMaxHeight - viewport.height);
+    const layoutOverlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    const heightExpansion = viewport.height - this.viewportLastHeight;
+    const activeInput = this.isKeyboardInput(document.activeElement);
+    const likelyOpen = heightLoss > 160 || layoutOverlap > 160;
+    const likelyClosed = heightLoss < 125 && layoutOverlap < 125;
+
+    if (this.keyboardOpen) {
+      if (heightExpansion > 100 || likelyClosed) this.keyboardOpen = false;
+    } else if (activeInput && viewport.scale <= 1.05 && likelyOpen) {
+      this.keyboardOpen = true;
+    }
+
+    document.body.classList.toggle("keyboard-open", this.keyboardOpen);
+    if (this.keyboardOpen) {
       if (this.isKeyboardInput(document.activeElement) && !this.isComposingItemName) {
         this.ensureFocusedFieldVisible();
       }
     } else {
       this.viewportMaxHeight = Math.max(this.viewportMaxHeight, viewport.height);
     }
+    this.viewportLastHeight = viewport.height;
   }
 
   ensureFocusedFieldVisible() {
@@ -259,13 +282,13 @@ window.ShoppingApp.UI = class UI {
 
   handleItemCompositionEnd() {
     this.isComposingItemName = false;
+    this.scheduleKeyboardStateUpdate();
     if (this.pendingAddAfterComposition) {
       this.pendingAddAfterComposition = false;
       queueMicrotask(() => this.elements.addItemForm.requestSubmit());
       return;
     }
     requestAnimationFrame(() => {
-      this.updateKeyboardState();
       this.ensureFocusedFieldVisible();
     });
   }

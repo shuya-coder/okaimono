@@ -24,6 +24,8 @@
     report("購入日不明データへ架空の日付を付けない", runtime.purchasedManager.getAll().find((item) => item.name === "日付不明商品")?.lastPurchasedAt === null && doc.querySelector("#purchasedList").textContent.includes("購入日不明"));
     report("4タブ構成と履歴名称", [...doc.querySelectorAll(".tab-button span")].map((node) => node.textContent).join(",") === "買い物,レシート,履歴,設定");
     report("履歴画面に3つの切り替えを表示", [...doc.querySelectorAll(".history-view-button")].map((node) => node.textContent.trim()).join(",") === "レシート履歴,最近の購入履歴,購入記録" && doc.querySelector("#receiptList").closest("[data-panel]")?.dataset.panel === "purchased" && !doc.querySelector("[data-panel='receipts'] #receiptList"));
+    const monthlySpendCard = doc.querySelector("#monthlySpend").closest(".monthly-spend-card");
+    report("今月の支出をレシート履歴の最上部へ移動", doc.querySelector("#receiptHistoryView").firstElementChild === monthlySpendCard && !doc.querySelector("[data-panel='receipts'] #monthlySpend") && doc.querySelector("[data-panel='receipts'] #receiptMonth"));
     report("390px幅でChatGPTコピー・貼り付け・ファイルUIが横にはみ出さない", doc.documentElement.scrollWidth <= doc.documentElement.clientWidth && doc.querySelector("#copyChatGptPromptButton") && doc.querySelector("#chatGptReceiptJson") && doc.querySelector("#pasteClipboardButton") && doc.querySelector("#chatGptJsonFileInput") && doc.querySelector("#importChatGptJsonButton"));
     const originalNameInput = doc.querySelector("#itemName");
     doc.querySelector("#itemName").value = "連続追加商品";
@@ -50,6 +52,21 @@
     await new Promise((resolve) => setTimeout(resolve, 240));
     report("compositionend後に同じ入力欄で2件目を一度だけ追加", doc.querySelector("#addItemPanel").tagName === "SECTION" && win.getComputedStyle(doc.querySelector("#addItemPanel")).display !== "none" && doc.querySelector("#itemName") === originalNameInput && originalNameInput.isConnected && originalNameInput.value === "" && doc.activeElement === originalNameInput && runtime.shoppingManager.getListItems().filter((item) => item.name === "連続追加2件目").length === 1);
     report("キーボード表示相当のViewport縮小中は下部タブを隠す", doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity === "0");
+    runtime.ui.viewportMaxHeight = win.visualViewport.height;
+    runtime.ui.updateKeyboardState();
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    report("フォーカスが残っていてもキーボードを閉じたら下部タブを戻す", doc.activeElement === originalNameInput && !runtime.ui.keyboardOpen && !doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity !== "0");
+    runtime.ui.viewportMaxHeight = win.visualViewport.height + 300;
+    runtime.ui.updateKeyboardState();
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    report("キーボードを再度開いたら下部タブを隠す", runtime.ui.keyboardOpen && doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity === "0");
+    runtime.ui.viewportBaselineWidth = win.visualViewport.width + 100;
+    runtime.ui.updateKeyboardState();
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    report("横幅変化はキーボードと誤判定しない", !runtime.ui.keyboardOpen && !doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity !== "0");
+    runtime.ui.viewportMaxHeight = win.visualViewport.height + 300;
+    runtime.ui.updateKeyboardState();
+    await new Promise((resolve) => setTimeout(resolve, 220));
     doc.querySelector("#itemName").blur();
     await new Promise((resolve) => setTimeout(resolve, 180));
     report("入力欄がぼけてもキーボード表示中は下部タブを隠す", doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity === "0");
@@ -98,7 +115,7 @@
     runtime.receiptUI.closeEditor();
     runtime.receiptUI.openEditor(stored); doc.querySelector("#receiptTotal").value = "1100"; runtime.receiptUI.currentItems[0].amount = 1100; doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
     await waitFor(async () => (await runtime.receiptManager.getAll())[0]?.total === 1100);
-    report("レシート編集", (await runtime.receiptManager.getAll())[0].total === 1100);
+    report("レシート編集で今月の支出を自動更新", (await runtime.receiptManager.getAll())[0].total === 1100 && doc.querySelector("#monthlySpend").textContent.includes("1,100"));
     const prompt = runtime.receiptManager.getChatGptPrompt();
     report("ChatGPT解析指示に共通JSONスキーマとjsonコードブロック指定を含む", prompt.includes("okaimono-receipt-v1") && prompt.includes("includedTax") && prompt.includes("externalTax") && prompt.includes("食料品、日用品、未分類") && prompt.includes("```json") && prompt.includes("推測した数値を確定値として書かない"));
     let copiedPrompt = "";
@@ -159,6 +176,7 @@
     report("ChatGPT JSONをIndexedDBへ保存して支出分析へ反映", savedLife.receipt.source === "chatgpt-json" && storedLife.items.length === 16 && storedLife.subtotal === 4565 && doc.querySelector("#monthlySpend").textContent.includes("6,001") && doc.querySelector("#storeSpend").textContent.includes("ライフ 宮野木店"));
     await runtime.receiptManager.db.deleteReceipt("life-json-regression");
     await runtime.receiptUI.renderAll();
+    report("レシート削除で今月の支出を自動更新", doc.querySelector("#monthlySpend").textContent.includes("1,100"));
 
     const mismatchJson = { ...lifeJson, total:5000 };
     const mismatch = await runtime.receiptManager.importChatGptJson(JSON.stringify(mismatchJson));
@@ -220,8 +238,8 @@
     report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v4.1.4");
-    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.1.4"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
+    const cache = await win.caches.open("shopping-app-v4.2.0");
+    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.2.0"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
     report("新しい取り込み機能をオフラインキャッシュしOCR資産を除外", Boolean(managerScript) && !oldTesseract);
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
     report("不要な外部通信なし", foreign.length === 0, foreign.join(", "));
