@@ -154,22 +154,59 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
   getChatGptPrompt() {
     const categories = this.categoryManager.getAll().map((category) => category.name);
     const schema = this.getChatGptSchema();
-    return `添付したレシート写真を読み取り、次のJSONスキーマに厳密に従って出力してください。\n\n${JSON.stringify(schema, null, 2)}\n\nルール:\n- Markdownのコードブロックや説明文を付けず、JSONオブジェクトだけを出力する。\n- 写真から確認できない値はnullにし、推測した数値を確定値として書かない。\n- 金額は円単位の数値とし、通貨記号やカンマを含めない。値引額discountは正の数値で記録する。\n- subtotalはレシートに印字された小計または商品合計をそのまま記録し、値引きを独自に足し引きして作らない。\n- includedTaxは小計や商品金額に含まれる内税で、合計計算時に加算しない。\n- externalTaxは別途加算される外税で、合計計算時に一度だけ扱う。\n- 商品ごとのamountはその商品の数量分を含む商品別金額とする。\n- 不確かな項目名をuncertainFieldsへ入れる。\n- カテゴリは次のいずれかを使う: ${categories.join("、")}。判断できない場合は「未分類」にする。\n- 商品ではない小計、値引き、税額、合計、預り金、釣銭をitemsへ入れない。\n- 日時は日本時間のISO 8601形式で記録する。`;
+    return `添付したレシート写真を読み取り、次のJSONスキーマに厳密に従って出力してください。\n\n${JSON.stringify(schema, null, 2)}\n\nルール:\n- 回答はMarkdownの\`\`\`jsonコードブロック1つだけとし、その中にJSONオブジェクトだけを入れる。説明文は付けない。\n- 写真から確認できない値はnullにし、推測した数値を確定値として書かない。\n- 金額は円単位の数値とし、通貨記号やカンマを含めない。値引額discountは正の数値で記録する。\n- subtotalはレシートに印字された小計または商品合計をそのまま記録し、値引きを独自に足し引きして作らない。\n- includedTaxは小計や商品金額に含まれる内税で、合計計算時に加算しない。\n- externalTaxは別途加算される外税で、合計計算時に一度だけ扱う。\n- 商品ごとのamountはその商品の数量分を含む商品別金額とする。\n- 不確かな項目名をuncertainFieldsへ入れる。\n- カテゴリは次のいずれかを使う: ${categories.join("、")}。判断できない場合は「未分類」にする。\n- 商品ではない小計、値引き、税額、合計、預り金、釣銭をitemsへ入れない。\n- 日時は日本時間のISO 8601形式で記録する。`;
   }
 
   async importChatGptJson(input) {
-    const source = String(input || "").trim();
-    if (!source) throw new Error("ChatGPTの解析結果を貼り付けてください。");
-    if (source.length > 500000) throw new Error("JSONが大きすぎます。50万文字以内にしてください。");
-    const jsonText = this.unwrapJsonFence(source);
-    let data;
-    try {
-      data = JSON.parse(jsonText);
-    } catch {
-      throw new Error("JSONの形式が正しくありません。ChatGPTの回答全体ではなくJSONだけを貼り付けてください。");
-    }
-    this.validateChatGptReceipt(data);
+    const analysis = await this.analyzeChatGptInput(input);
+    if (analysis.candidates.length > 1) throw this.createImportError("AMBIGUOUS_JSON", `${analysis.candidates.length}件の有効なレシートJSONが見つかりました。プレビューで使用する候補を選択してください。`);
+    return analysis.candidates[0].receipt;
+  }
 
+  async analyzeChatGptInput(input) {
+    const source = String(input || "").trim();
+    if (!source) throw this.createImportError("JSON_NOT_FOUND", "JSONが見つかりません。ChatGPTの解析結果を貼り付けてください。");
+    if (source.length > 500000) throw this.createImportError("NUMBER_OUT_OF_RANGE", "入力が大きすぎます。50万文字以内にしてください。");
+    const extraction = this.extractJsonSegments(source);
+    if (extraction.segments.length === 0) {
+      if (extraction.sawOpeningToken) throw this.createImportError("JSON_SYNTAX", "JSONの開始記号はありますが、閉じ括弧または文字列の引用符が不足しています。");
+      throw this.createImportError("JSON_NOT_FOUND", "入力内容からJSONオブジェクトまたは配列を見つけられませんでした。");
+    }
+
+    const parsedCandidates = [];
+    const syntaxErrors = [];
+    extraction.segments.forEach((segment, index) => {
+      try {
+        parsedCandidates.push({ index, data: JSON.parse(segment.text), rawText: segment.text });
+      } catch (error) {
+        syntaxErrors.push(this.createImportError("JSON_SYNTAX", `JSON候補${index + 1}の構文が正しくありません。${error.message}`));
+      }
+    });
+    if (parsedCandidates.length === 0) throw syntaxErrors[0] || this.createImportError("JSON_SYNTAX", "JSON構文を解析できませんでした。");
+
+    const validCandidates = [];
+    const validationErrors = [];
+    for (const candidate of parsedCandidates) {
+      try {
+        this.validateChatGptReceipt(candidate.data);
+        validCandidates.push({
+          index: candidate.index,
+          data: candidate.data,
+          rawText: candidate.rawText,
+          receipt: await this.convertChatGptData(candidate.data),
+        });
+      } catch (error) {
+        validationErrors.push({ error, data: candidate.data });
+      }
+    }
+    if (validCandidates.length === 0) {
+      const schemaLikeError = validationErrors.find(({ data }) => data && typeof data === "object" && !Array.isArray(data) && ("schemaVersion" in data || "items" in data));
+      throw schemaLikeError?.error || validationErrors[0]?.error || syntaxErrors[0] || this.createImportError("SCHEMA_MISMATCH", "既存スキーマに適合するJSONがありませんでした。");
+    }
+    return { candidates: validCandidates, ignoredCandidateCount: parsedCandidates.length - validCandidates.length + syntaxErrors.length };
+  }
+
+  async convertChatGptData(data) {
     const warnings = [];
     const items = [];
     for (const item of data.items) {
@@ -215,31 +252,33 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
   }
 
   validateChatGptReceipt(data) {
-    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("JSONの最上位はオブジェクトにしてください。");
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw this.createImportError("TYPE_MISMATCH", "JSONの最上位はオブジェクトにしてください。");
     const topKeys = ["schemaVersion", "storeName", "purchasedAt", "items", "subtotal", "discount", "includedTax", "externalTax", "total", "uncertainFields", "notes"];
     this.assertAllowedKeys(data, topKeys, "最上位");
-    if (data.schemaVersion !== "okaimono-receipt-v1") throw new Error("対応していないJSONスキーマです。解析指示をコピーし直してください。");
+    if (!("schemaVersion" in data)) throw this.createImportError("REQUIRED_FIELD_MISSING", "必須項目schemaVersionがありません。");
+    if (data.schemaVersion !== "okaimono-receipt-v1") throw this.createImportError("SCHEMA_MISMATCH", "スキーマがokaimono-receipt-v1と一致しません。解析指示をコピーし直してください。");
     ["storeName", "purchasedAt", "subtotal", "discount", "includedTax", "externalTax", "total"].forEach((key) => {
-      if (!(key in data)) throw new Error(`${key}がありません。不明な場合はnullにしてください。`);
+      if (!(key in data)) throw this.createImportError("REQUIRED_FIELD_MISSING", `必須項目${key}がありません。不明な場合はnullにしてください。`);
     });
     this.assertNullableString(data.storeName, "storeName", 200);
     this.assertNullableString(data.notes, "notes", 5000);
     if (data.purchasedAt !== null && (typeof data.purchasedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(data.purchasedAt) || Number.isNaN(Date.parse(data.purchasedAt)))) {
-      throw new Error("purchasedAtはタイムゾーン付きISO 8601形式またはnullにしてください。");
+      throw this.createImportError("TYPE_MISMATCH", "purchasedAtはタイムゾーン付きISO 8601形式またはnullにしてください。");
     }
     ["subtotal", "discount", "includedTax", "externalTax", "total"].forEach((key) => this.assertNullableNumber(data[key], key, 0, 1000000000));
     this.assertStringArray(data.uncertainFields, "uncertainFields", ["storeName", "purchasedAt", "subtotal", "discount", "includedTax", "externalTax", "total"]);
-    if (!Array.isArray(data.items)) throw new Error("itemsは配列にしてください。");
-    if (data.items.length > 500) throw new Error("商品明細は500件以内にしてください。");
+    if (!("items" in data)) throw this.createImportError("REQUIRED_FIELD_MISSING", "必須項目itemsがありません。");
+    if (!Array.isArray(data.items)) throw this.createImportError("TYPE_MISMATCH", "itemsは配列にしてください。");
+    if (data.items.length > 500) throw this.createImportError("NUMBER_OUT_OF_RANGE", "商品明細は500件以内にしてください。");
     const itemKeys = ["name", "quantity", "unitPrice", "amount", "category", "uncertainFields"];
     data.items.forEach((item, index) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`items[${index}]はオブジェクトにしてください。`);
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw this.createImportError("TYPE_MISMATCH", `items[${index}]はオブジェクトにしてください。`);
       this.assertAllowedKeys(item, itemKeys, `items[${index}]`);
       ["name", "quantity", "unitPrice", "amount", "category"].forEach((key) => {
-        if (!(key in item)) throw new Error(`items[${index}].${key}がありません。不明な場合はnullにしてください。`);
+        if (!(key in item)) throw this.createImportError("REQUIRED_FIELD_MISSING", `必須項目items[${index}].${key}がありません。不明な場合はnullにしてください。`);
       });
       this.assertNullableString(item.name, `items[${index}].name`, 200);
-      if (typeof item.category !== "string" || !this.categoryManager.getAll().some((category) => category.name === item.category)) throw new Error(`items[${index}].categoryは解析指示に記載されたカテゴリ名にしてください。`);
+      if (typeof item.category !== "string" || !this.categoryManager.getAll().some((category) => category.name === item.category)) throw this.createImportError("INVALID_CATEGORY", `items[${index}].category「${String(item.category)}」は利用できません。解析指示に記載されたカテゴリ名を使用してください。`);
       this.assertNullableNumber(item.quantity, `items[${index}].quantity`, 0.01, 100000);
       this.assertNullableNumber(item.unitPrice, `items[${index}].unitPrice`, 0, 1000000000);
       this.assertNullableNumber(item.amount, `items[${index}].amount`, 0, 1000000000);
@@ -257,13 +296,20 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
     if (itemTotal !== null && receipt.subtotal !== null && receipt.subtotal !== undefined) {
       const matchesBeforeDiscount = Math.abs(itemTotal - receipt.subtotal) < 1;
       const matchesAfterDiscount = Math.abs(itemTotal - discount - receipt.subtotal) < 1;
-      if (!matchesBeforeDiscount && !matchesAfterDiscount) warnings.push(`商品明細(${itemTotal}円)・値引き(${discount}円)と小計(${receipt.subtotal}円)の関係を確認できません`);
+      if (!matchesBeforeDiscount && !matchesAfterDiscount) {
+        const differences = [receipt.subtotal - itemTotal, receipt.subtotal - (itemTotal - discount)];
+        const closestDifference = differences.reduce((closest, value) => Math.abs(value) < Math.abs(closest) ? value : closest);
+        warnings.push(`商品明細・値引きと小計の差額は${closestDifference}円です`);
+      }
     }
     if (receipt.total !== null && receipt.total !== undefined) {
       const candidates = receipt.subtotal === null || receipt.subtotal === undefined
         ? (itemTotal === null ? [] : [itemTotal - discount + externalTax])
         : [receipt.subtotal + externalTax, receipt.subtotal - discount + externalTax];
-      if (candidates.length && !candidates.some((value) => Math.abs(value - receipt.total) < 1)) warnings.push(`小計・値引き・外税から支払合計(${receipt.total}円)を確認できません`);
+      if (candidates.length && !candidates.some((value) => Math.abs(value - receipt.total) < 1)) {
+        const closest = candidates.reduce((current, value) => Math.abs(receipt.total - value) < Math.abs(receipt.total - current) ? value : current);
+        warnings.push(`計算額(${closest}円)とレシート記載の支払合計(${receipt.total}円)の差額は${receipt.total - closest}円です`);
+      }
     }
     return warnings;
   }
@@ -276,9 +322,46 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
     return (exact || unclassified || this.categoryManager.getFallback()).id;
   }
 
-  unwrapJsonFence(value) {
-    const match = value.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-    return match ? match[1].trim() : value;
+  extractJsonSegments(source) {
+    const segments = [];
+    let sawOpeningToken = false;
+    for (let index = 0; index < source.length; index += 1) {
+      if (source[index] !== "{" && source[index] !== "[") continue;
+      sawOpeningToken = true;
+      const segment = this.readBalancedJson(source, index);
+      if (!segment.complete) continue;
+      segments.push({ text: source.slice(index, segment.end + 1), start: index, end: segment.end });
+      index = segment.end;
+    }
+    return { segments, sawOpeningToken };
+  }
+
+  readBalancedJson(source, start) {
+    const stack = [];
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < source.length; index += 1) {
+      const character = source[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+        continue;
+      }
+      if (character === "{" || character === "[") {
+        stack.push(character === "{" ? "}" : "]");
+        continue;
+      }
+      if (character === "}" || character === "]") {
+        if (stack.pop() !== character) return { complete: false, end: index };
+        if (stack.length === 0) return { complete: true, end: index };
+      }
+    }
+    return { complete: false, end: source.length - 1 };
   }
 
   nullableNumber(value, minimum = 0) {
@@ -289,22 +372,33 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
 
   assertAllowedKeys(object, allowedKeys, label) {
     const unexpected = Object.keys(object).filter((key) => !allowedKeys.includes(key));
-    if (unexpected.length) throw new Error(`${label}に未対応の項目があります: ${unexpected.join("、")}`);
+    if (unexpected.length) throw this.createImportError("SCHEMA_MISMATCH", `${label}にスキーマ外の項目があります: ${unexpected.join("、")}`);
   }
 
   assertNullableString(value, label, maxLength) {
     if (value === undefined || value === null) return;
-    if (typeof value !== "string" || value.length > maxLength) throw new Error(`${label}は${maxLength}文字以内の文字列またはnullにしてください。`);
+    if (typeof value !== "string") throw this.createImportError("TYPE_MISMATCH", `${label}は文字列またはnullにしてください。`);
+    if (value.length > maxLength) throw this.createImportError("NUMBER_OUT_OF_RANGE", `${label}は${maxLength}文字以内にしてください。`);
   }
 
   assertNullableNumber(value, label, minimum, maximum) {
     if (value === null) return;
-    if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) throw new Error(`${label}は${minimum}以上${maximum}以下の数値またはnullにしてください。`);
+    if (typeof value !== "number" || !Number.isFinite(value)) throw this.createImportError("TYPE_MISMATCH", `${label}は数値またはnullにしてください。`);
+    if (value < minimum || value > maximum) throw this.createImportError("NUMBER_OUT_OF_RANGE", `${label}は${minimum}以上${maximum}以下にしてください。`);
   }
 
   assertStringArray(value, label, allowedValues = null) {
     if (value === undefined) return;
-    if (!Array.isArray(value) || value.length > 100 || value.some((item) => typeof item !== "string" || item.length > 100 || (allowedValues && !allowedValues.includes(item)))) throw new Error(`${label}はスキーマに記載された項目名の配列にしてください。`);
+    if (!Array.isArray(value)) throw this.createImportError("TYPE_MISMATCH", `${label}は文字列配列にしてください。`);
+    if (value.length > 100 || value.some((item) => typeof item === "string" && item.length > 100)) throw this.createImportError("NUMBER_OUT_OF_RANGE", `${label}は100件以内・各100文字以内にしてください。`);
+    if (value.some((item) => typeof item !== "string")) throw this.createImportError("TYPE_MISMATCH", `${label}の各値は文字列にしてください。`);
+    if (allowedValues && value.some((item) => !allowedValues.includes(item))) throw this.createImportError("SCHEMA_MISMATCH", `${label}にはスキーマに記載された項目名だけを指定してください。`);
+  }
+
+  createImportError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
   }
 
   createId() {

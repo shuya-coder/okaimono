@@ -888,15 +888,26 @@ dialog::backdrop {
 .monthly-spend-card strong { font-size: clamp(2rem, 10vw, 3.4rem); line-height: 1.05; }
 .privacy-badge, .review-badge { padding: 4px 9px; border-radius: 999px; background: #e8f7ed; color: #18723a; font-size: .78rem; font-weight: 900; }
 .review-badge { background: #fff1cf; color: #8a5a00; }
-.receipt-import-actions, .receipt-search-row, .receipt-fields, .analytics-grid { display: grid; gap: 10px; }
-.receipt-import-actions, .receipt-search-row { grid-template-columns: 1fr 1fr; }
+.receipt-import-actions, .json-input-actions, .receipt-search-row, .receipt-fields, .analytics-grid { display: grid; gap: 10px; }
+.receipt-import-actions, .json-input-actions, .receipt-search-row { grid-template-columns: 1fr 1fr; }
 .chatgpt-import-steps { margin: 0 0 14px; padding-left: 1.4rem; color: var(--muted); font-size: .9rem; line-height: 1.7; }
 .copy-prompt-button { width: 100%; }
 .json-import-label { display: grid; gap: 7px; margin-top: 14px; }
 .json-import-label textarea { min-height: 210px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85rem; line-height: 1.5; }
+.json-input-actions { margin-top: 10px; }
+.json-input-actions > * { min-width: 0; }
+.json-file-button { display: flex; align-items: center; justify-content: center; min-height: 48px; text-align: center; }
+.input-help { margin: 8px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .receipt-import-actions { margin-top: 10px; }
 .error-message { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #d34b4b; border-radius: 10px; background: #fff0f0; color: #9f1f1f; font-weight: 800; }
 body.dark-mode .error-message { background: #3d1e1e; color: #ffb6b6; }
+.json-import-preview { margin-top: 14px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); }
+.json-candidate-list { display: grid; gap: 8px; }
+.json-candidate-card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; padding: 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); cursor: pointer; }
+.json-candidate-card:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
+.json-candidate-card input { width: 22px; min-height: 22px; margin-top: 2px; }
+.json-candidate-card span { min-width: 0; display: grid; gap: 3px; }
+.json-candidate-card small { overflow-wrap: anywhere; color: var(--muted); }
 .receipt-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .receipt-items-editor, .receipt-list, .summary-list, .price-history { display: grid; gap: 8px; }
 .receipt-item-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
@@ -922,7 +933,7 @@ body.dark-mode .warning-message { background: #3d3316; color: #ffe89a; }
   .monthly-spend-card { grid-template-columns: 1fr; }
   .monthly-spend-card label, .monthly-spend-card input { grid-column: 1; grid-row: auto; }
   .monthly-spend-card label { margin-top: 10px; }
-  .receipt-fields, .receipt-import-actions, .receipt-search-row { grid-template-columns: 1fr; }
+  .receipt-fields, .receipt-import-actions, .json-input-actions, .receipt-search-row { grid-template-columns: 1fr; }
 }
 
 /* Mobile-first polish: readable controls and comfortable one-handed operation. */

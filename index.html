@@ -9,10 +9,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>買い物リスト</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.0.0">
+  <link rel="manifest" href="manifest.webmanifest?v=4.0.1">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="css/style.css?v=4.0.0">
+  <link rel="stylesheet" href="css/style.css?v=4.0.1">
 </head>
 <body>
   <div class="app-shell">
@@ -38,8 +38,12 @@
           <ol class="chatgpt-import-steps"><li>解析指示をコピー</li><li>ChatGPTにレシート写真と指示を送る</li><li>返されたJSONを貼り付けて読み込む</li></ol>
           <button id="copyChatGptPromptButton" class="secondary-button copy-prompt-button" type="button">📋 ChatGPT用の解析指示をコピー</button>
           <label class="json-import-label" for="chatGptReceiptJson">ChatGPT解析結果を貼り付ける<textarea id="chatGptReceiptJson" rows="10" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="{&#10;  &quot;schemaVersion&quot;: &quot;okaimono-receipt-v1&quot;,&#10;  ...&#10;}"></textarea></label>
+          <div class="json-input-actions"><button id="pasteClipboardButton" class="secondary-button" type="button">📋 クリップボードから貼り付け</button><label class="file-button json-file-button">📄 JSONファイルを選択<input id="chatGptJsonFileInput" type="file" accept=".json,application/json,text/json"></label></div>
+          <p id="jsonFileName" class="input-help" hidden></p>
+          <p class="input-help">iPhoneでクリップボードへのアクセスが許可されない場合は、上の入力欄を長押しして「ペースト」を選べます。</p>
           <p id="chatGptImportError" class="error-message" role="alert" hidden></p>
           <div class="receipt-import-actions"><button id="importChatGptJsonButton" class="primary-button" type="button">JSONを読み込む</button><button id="manualReceiptButton" class="secondary-button" type="button">✍ 手入力で登録</button></div>
+          <section id="chatGptImportPreview" class="json-import-preview" aria-labelledby="chatGptImportPreviewTitle" hidden><div class="section-title"><h3 id="chatGptImportPreviewTitle">読み込み結果のプレビュー</h3><span id="chatGptImportPreviewSummary" class="badge"></span></div><div id="chatGptImportCandidates" class="json-candidate-list"></div><div class="receipt-import-actions"><button id="confirmChatGptImportButton" class="primary-button" type="button" disabled>選択した内容を確認・編集</button><button id="cancelChatGptPreviewButton" class="secondary-button" type="button">プレビューを閉じる</button></div></section>
           <p class="note">このアプリからChatGPTや外部APIへデータを送信することはありません。ChatGPTへの写真送信は、ご自身で内容を確認して行ってください。</p>
         </section>
         <section id="receiptEditor" class="card receipt-editor" hidden>
@@ -69,6 +73,6 @@
   <dialog id="editDialog" aria-labelledby="editDialogTitle"><form id="editForm" method="dialog" class="dialog-card"><h2 id="editDialogTitle">商品を編集</h2><input id="editItemId" type="hidden"><label>商品名<input id="editName" type="text" required></label><label>個数<input id="editCount" type="number" inputmode="numeric" min="1" value="1" required></label><label>カテゴリー<select id="editCategory"></select></label><div class="dialog-actions"><button class="secondary-button" type="button" id="cancelEditButton">キャンセル</button><button class="primary-button" type="submit">保存</button></div></form></dialog>
   <dialog id="backupPreviewDialog" aria-labelledby="backupPreviewTitle"><div class="dialog-card"><h2 id="backupPreviewTitle">復元内容の確認</h2><div id="backupPreview"></div><p class="warning-message">復元すると同じ種類の現在データを置き換えます。復元前にJSON保存を推奨します。</p><div class="dialog-actions"><button id="cancelBackupImport" class="secondary-button" type="button">キャンセル</button><button id="confirmBackupImport" class="danger-button" type="button">復元する</button></div></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="js/storage.js?v=4.0.0"></script><script src="js/category.js?v=4.0.0"></script><script src="js/shopping.js?v=4.0.0"></script><script src="js/history.js?v=4.0.0"></script><script src="js/receipt-db.js?v=4.0.0"></script><script src="js/receipt-manager.js?v=4.0.0"></script><script src="js/receipt-ui.js?v=4.0.0"></script><script src="js/ui.js?v=4.0.0"></script><script src="js/app.js?v=4.0.0"></script>
+  <script src="js/storage.js?v=4.0.1"></script><script src="js/category.js?v=4.0.1"></script><script src="js/shopping.js?v=4.0.1"></script><script src="js/history.js?v=4.0.1"></script><script src="js/receipt-db.js?v=4.0.1"></script><script src="js/receipt-manager.js?v=4.0.1"></script><script src="js/receipt-ui.js?v=4.0.1"></script><script src="js/ui.js?v=4.0.1"></script><script src="js/app.js?v=4.0.1"></script>
 </body>
 </html>

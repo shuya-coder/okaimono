@@ -7,6 +7,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.showToast = showToast;
     this.currentItems = [];
     this.currentReceiptMeta = {};
+    this.pendingImportCandidates = [];
     this.search = "";
     this.monthFilter = "all";
     this.elements = {};
@@ -21,14 +22,19 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["receiptMonth", "monthlySpend", "copyChatGptPromptButton", "chatGptReceiptJson", "importChatGptJsonButton", "chatGptImportError", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["receiptMonth", "monthlySpend", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
   bindEvents() {
     this.elements.receiptMonth.addEventListener("change", () => this.renderAll());
     this.elements.copyChatGptPromptButton.addEventListener("click", () => this.copyChatGptPrompt());
+    this.elements.pasteClipboardButton.addEventListener("click", () => this.pasteFromClipboard());
+    this.elements.chatGptJsonFileInput.addEventListener("change", (event) => this.loadJsonFile(event));
     this.elements.importChatGptJsonButton.addEventListener("click", () => this.importChatGptJson());
+    this.elements.chatGptImportCandidates.addEventListener("change", () => { this.elements.confirmChatGptImportButton.disabled = !this.getSelectedImportCandidate(); });
+    this.elements.confirmChatGptImportButton.addEventListener("click", () => this.confirmImportCandidate());
+    this.elements.cancelChatGptPreviewButton.addEventListener("click", () => this.clearImportPreview());
     this.elements.manualReceiptButton.addEventListener("click", () => this.openEditor(this.emptyReceipt()));
     this.elements.addReceiptItemButton.addEventListener("click", () => this.addItem());
     this.elements.receiptItemsEditor.addEventListener("input", (event) => this.updateItem(event));
@@ -67,17 +73,124 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   async importChatGptJson() {
+    this.clearImportError();
+    this.clearImportPreview();
+    try {
+      const analysis = await this.manager.analyzeChatGptInput(this.elements.chatGptReceiptJson.value);
+      this.renderImportPreview(analysis);
+    } catch (error) {
+      this.showImportError(error);
+    }
+  }
+
+  async pasteFromClipboard() {
+    this.clearImportError();
+    try {
+      if (!navigator.clipboard?.readText) throw new Error("クリップボードAPIを利用できません。");
+      const text = await navigator.clipboard.readText();
+      if (!text) throw new Error("クリップボードに貼り付けられる文字がありません。");
+      this.elements.chatGptReceiptJson.value = text;
+      this.elements.chatGptReceiptJson.focus();
+      this.showToast("クリップボードから貼り付けました");
+    } catch {
+      const error = new Error("クリップボードを直接読み取れませんでした。入力欄を長押しして「ペースト」を選んでください。入力済みの内容は保持されています。");
+      error.code = "CLIPBOARD_UNAVAILABLE";
+      this.showImportError(error);
+      this.elements.chatGptReceiptJson.focus();
+    }
+  }
+
+  async loadJsonFile(event) {
+    this.clearImportError();
+    this.clearImportPreview();
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > 500000) {
+        const error = new Error("JSONファイルは50万バイト以内にしてください。");
+        error.code = "NUMBER_OUT_OF_RANGE";
+        throw error;
+      }
+      const bytes = await file.arrayBuffer();
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      this.elements.chatGptReceiptJson.value = text;
+      this.elements.jsonFileName.textContent = `選択中: ${file.name}`;
+      this.elements.jsonFileName.hidden = false;
+      await this.importChatGptJson();
+    } catch (error) {
+      if (!error.code) {
+        error.code = "JSON_SYNTAX";
+        error.message = "UTF-8のJSONファイルを読み込めませんでした。";
+      }
+      this.showImportError(error);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  renderImportPreview(analysis) {
+    this.pendingImportCandidates = analysis.candidates;
+    const multiple = analysis.candidates.length > 1;
+    this.elements.chatGptImportPreviewSummary.textContent = `${analysis.candidates.length}件`;
+    this.elements.chatGptImportCandidates.innerHTML = analysis.candidates.map((candidate, index) => {
+      const receipt = candidate.receipt;
+      const date = receipt.purchasedAt ? this.formatDate(receipt.purchasedAt) : "日時不明";
+      const total = receipt.total === null ? "合計不明" : `¥${this.formatMoney(receipt.total)}`;
+      const itemNames = receipt.items.slice(0, 3).map((item) => this.escapeHtml(item.name || "商品名不明")).join("、");
+      return `<label class="json-candidate-card"><input type="radio" name="receiptJsonCandidate" value="${index}" ${multiple ? "" : "checked"}><span><strong>${this.escapeHtml(receipt.storeName || "店舗名不明")}</strong><small>${date}・${receipt.items.length}商品・${total}</small><small>${itemNames}${receipt.items.length > 3 ? "…" : ""}</small></span></label>`;
+    }).join("");
+    this.elements.confirmChatGptImportButton.disabled = multiple;
+    this.elements.chatGptImportPreview.hidden = false;
+    this.elements.chatGptImportPreview.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  getSelectedImportCandidate() {
+    const selected = this.elements.chatGptImportCandidates.querySelector("input[name='receiptJsonCandidate']:checked");
+    return selected ? this.pendingImportCandidates[Number(selected.value)] : null;
+  }
+
+  confirmImportCandidate() {
+    const candidate = this.getSelectedImportCandidate();
+    if (!candidate) {
+      const error = new Error("使用するレシートJSONを選択してください。");
+      error.code = "AMBIGUOUS_JSON";
+      this.showImportError(error);
+      return;
+    }
+    this.openEditor(candidate.receipt);
+    this.clearImportPreview();
+    this.showToast("読み込み内容を確認して保存してください");
+  }
+
+  clearImportPreview() {
+    this.pendingImportCandidates = [];
+    this.elements.chatGptImportPreview.hidden = true;
+    this.elements.chatGptImportCandidates.innerHTML = "";
+    this.elements.confirmChatGptImportButton.disabled = true;
+  }
+
+  clearImportError() {
     this.elements.chatGptImportError.hidden = true;
     this.elements.chatGptImportError.textContent = "";
-    try {
-      const result = await this.manager.importChatGptJson(this.elements.chatGptReceiptJson.value);
-      this.openEditor(result);
-      this.elements.chatGptReceiptJson.value = "";
-      this.showToast("解析結果を確認して保存してください");
-    } catch (error) {
-      this.elements.chatGptImportError.textContent = error.message || "JSONを読み込めませんでした。";
-      this.elements.chatGptImportError.hidden = false;
-    }
+    delete this.elements.chatGptImportError.dataset.errorCode;
+  }
+
+  showImportError(error) {
+    const labels = {
+      JSON_NOT_FOUND: "JSONが見つかりません",
+      JSON_SYNTAX: "JSON構文エラー",
+      REQUIRED_FIELD_MISSING: "必須項目が不足しています",
+      TYPE_MISMATCH: "データ型が違います",
+      INVALID_CATEGORY: "カテゴリが不正です",
+      NUMBER_OUT_OF_RANGE: "数値またはサイズが範囲外です",
+      SCHEMA_MISMATCH: "スキーマが一致しません",
+      AMBIGUOUS_JSON: "JSON候補を選択してください",
+      CLIPBOARD_UNAVAILABLE: "クリップボードを利用できません",
+    };
+    const code = error.code || "JSON_SYNTAX";
+    this.elements.chatGptImportError.dataset.errorCode = code;
+    this.elements.chatGptImportError.textContent = `${labels[code] || "読み込みエラー"}: ${error.message || "JSONを読み込めませんでした。"}`;
+    this.elements.chatGptImportError.hidden = false;
   }
 
   openEditor(receipt) {
@@ -172,13 +285,20 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     if (itemTotal !== null && subtotal !== null) {
       const matchesBeforeDiscount = Math.abs(itemTotal - subtotal) < 1;
       const matchesAfterDiscount = Math.abs(itemTotal - discount - subtotal) < 1;
-      if (!matchesBeforeDiscount && !matchesAfterDiscount) messages.push(`商品明細 ¥${this.formatMoney(itemTotal)}・値引き ¥${this.formatMoney(discount)} と小計 ¥${this.formatMoney(subtotal)} の関係を確認できません。`);
+      if (!matchesBeforeDiscount && !matchesAfterDiscount) {
+        const differences = [subtotal - itemTotal, subtotal - (itemTotal - discount)];
+        const closestDifference = differences.reduce((closest, value) => Math.abs(value) < Math.abs(closest) ? value : closest);
+        messages.push(`商品明細・値引きと小計の差額は ¥${this.formatMoney(closestDifference)} です。`);
+      }
     }
     if (total === null) messages.push("支払合計が未入力のため、合計の検算は完了していません。");
     else {
       const candidates = subtotal === null ? (itemTotal === null ? [] : [itemTotal - discount + externalTax]) : [subtotal + externalTax, subtotal - discount + externalTax];
       if (!candidates.length) messages.push("小計または商品金額が未入力のため、合計の検算は完了していません。");
-      else if (!candidates.some((value) => Math.abs(value - total) < 1)) messages.push(`小計・値引き・外税から支払合計 ¥${this.formatMoney(total)} を確認できません。内税は加算していません。`);
+      else if (!candidates.some((value) => Math.abs(value - total) < 1)) {
+        const closest = candidates.reduce((current, value) => Math.abs(total - value) < Math.abs(total - current) ? value : current);
+        messages.push(`計算額 ¥${this.formatMoney(closest)} とレシート記載の支払合計 ¥${this.formatMoney(total)} の差額は ¥${this.formatMoney(total - closest)} です。内税は加算していません。`);
+      }
     }
     this.elements.receiptDifferenceWarning.hidden = messages.length === 0;
     this.elements.receiptDifferenceWarning.textContent = `${messages.join(" ")} 確認後、そのまま保存できます。`;
