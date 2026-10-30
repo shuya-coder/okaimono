@@ -17,6 +17,9 @@ window.ShoppingApp.UI = class UI {
     this.pendingPurchaseUndo = null;
     this.toastTimer = null;
     this.keyboardTimer = null;
+    this.keyboardWatchTimer = null;
+    this.keyboardWatchUntil = 0;
+    this.keyboardBlurredAt = 0;
     this.isComposingItemName = false;
     this.pendingAddAfterComposition = false;
     this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
@@ -147,11 +150,20 @@ window.ShoppingApp.UI = class UI {
 
     document.addEventListener("focusin", (event) => this.handleKeyboardFocus(event));
     document.addEventListener("focusout", () => this.handleKeyboardBlur());
+    document.addEventListener("pointerup", () => this.scheduleKeyboardStateUpdate(900));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) this.scheduleKeyboardStateUpdate(1600);
+    });
     window.visualViewport?.addEventListener("resize", () => this.scheduleKeyboardStateUpdate());
     window.visualViewport?.addEventListener("scroll", () => this.scheduleKeyboardStateUpdate());
     window.addEventListener("resize", () => this.scheduleKeyboardStateUpdate());
+    window.addEventListener("focus", () => this.scheduleKeyboardStateUpdate(1600));
+    window.addEventListener("pageshow", () => this.scheduleKeyboardStateUpdate(1600));
     window.addEventListener("orientationchange", () => {
       window.setTimeout(() => {
+        window.clearTimeout(this.keyboardWatchTimer);
+        this.keyboardWatchTimer = null;
+        this.keyboardWatchUntil = 0;
         this.viewportMaxHeight = window.visualViewport?.height || window.innerHeight;
         this.viewportBaselineWidth = window.visualViewport?.width || window.innerWidth;
         this.viewportLastHeight = this.viewportMaxHeight;
@@ -199,21 +211,37 @@ window.ShoppingApp.UI = class UI {
 
   handleKeyboardFocus(event) {
     if (!this.isKeyboardInput(event.target) || window.innerWidth > 760) return;
+    this.keyboardBlurredAt = 0;
     if (!this.keyboardOpen) {
       this.viewportMaxHeight = Math.max(this.viewportMaxHeight, window.visualViewport?.height || window.innerHeight);
     }
-    this.scheduleKeyboardStateUpdate();
+    this.scheduleKeyboardStateUpdate(1800);
   }
 
   handleKeyboardBlur() {
-    this.scheduleKeyboardStateUpdate();
+    this.keyboardBlurredAt = Date.now();
+    this.scheduleKeyboardStateUpdate(1800);
   }
 
-  scheduleKeyboardStateUpdate() {
+  scheduleKeyboardStateUpdate(watchDuration = 1400) {
     window.clearTimeout(this.keyboardTimer);
     this.updateKeyboardState();
     requestAnimationFrame(() => this.updateKeyboardState());
     this.keyboardTimer = window.setTimeout(() => this.updateKeyboardState(), 280);
+    this.startKeyboardWatch(watchDuration);
+  }
+
+  startKeyboardWatch(duration = 1400) {
+    this.keyboardWatchUntil = Math.max(this.keyboardWatchUntil, Date.now() + duration);
+    if (this.keyboardWatchTimer) return;
+    const watch = () => {
+      this.keyboardWatchTimer = null;
+      this.updateKeyboardState();
+      if (this.keyboardOpen || Date.now() < this.keyboardWatchUntil) {
+        this.keyboardWatchTimer = window.setTimeout(watch, 250);
+      }
+    };
+    this.keyboardWatchTimer = window.setTimeout(watch, 250);
   }
 
   updateKeyboardState() {
@@ -238,9 +266,10 @@ window.ShoppingApp.UI = class UI {
     const activeInput = this.isKeyboardInput(document.activeElement);
     const likelyOpen = heightLoss > 160 || layoutOverlap > 160;
     const likelyClosed = heightLoss < 125 && layoutOverlap < 125;
+    const blurSettled = !activeInput && this.keyboardBlurredAt > 0 && Date.now() - this.keyboardBlurredAt > 450;
 
     if (this.keyboardOpen) {
-      if (heightExpansion > 100 || likelyClosed) this.keyboardOpen = false;
+      if (heightExpansion > 100 || likelyClosed || blurSettled) this.keyboardOpen = false;
     } else if (activeInput && viewport.scale <= 1.05 && likelyOpen) {
       this.keyboardOpen = true;
     }
@@ -515,33 +544,29 @@ window.ShoppingApp.UI = class UI {
   }
 
   createListItemHtml(item) {
-    return this.createItemHtml(item, {
-      leadingHtml: `
-        <div class="cart-icon" aria-hidden="true">📝</div>
-      `,
-      actionsHtml: `
-        <button class="small-button purchase-button" type="button" data-action="purchase" aria-label="${this.escapeHtml(item.name)}を購入済みにする">購入</button>
-        <button class="small-button" type="button" data-action="edit">編集</button>
-        <button class="small-button" type="button" data-action="increase">＋</button>
-        <button class="small-button" type="button" data-action="decrease">−</button>
-        <button class="small-button danger" type="button" data-action="delete">削除</button>
-      `,
-    });
-  }
-
-  createItemHtml(item, { leadingHtml, actionsHtml }) {
     const category = this.categoryManager.findById(item.categoryId) || this.categoryManager.getFallback();
+    const safeName = this.escapeHtml(item.name);
     return `
       <article class="shopping-item" data-id="${item.id}" style="--category-color:${this.escapeHtml(category.color)}">
-        ${leadingHtml}
         <div class="item-main">
-          <p class="item-name">${this.escapeHtml(item.name)} ×${item.count}</p>
-          <div class="item-meta">
-            <span><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
-            <span>${this.formatDateTime(item.createdAt)}</span>
+          <div class="item-title-row">
+            <p class="item-name">${safeName}</p>
+            <span class="item-category"><span class="color-dot" style="background:${this.escapeHtml(category.color)}"></span>${this.escapeHtml(category.name)}</span>
           </div>
         </div>
-        <div class="item-actions">${actionsHtml}</div>
+        <button class="small-button purchase-button" type="button" data-action="purchase" aria-label="${safeName}を購入済みにする">購入</button>
+        <div class="item-quick-actions">
+          <span class="quantity-display" aria-live="polite">個数 <strong>${item.count}</strong></span>
+          <button class="small-button quantity-button" type="button" data-action="decrease" aria-label="${safeName}の個数を減らす">−</button>
+          <button class="small-button quantity-button" type="button" data-action="increase" aria-label="${safeName}の個数を増やす">＋</button>
+          <details class="item-more-menu">
+            <summary aria-label="${safeName}の編集・削除メニュー">⋯</summary>
+            <div class="item-more-popover">
+              <button class="small-button" type="button" data-action="edit">編集</button>
+              <button class="small-button danger" type="button" data-action="delete">削除</button>
+            </div>
+          </details>
+        </div>
       </article>
     `;
   }

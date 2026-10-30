@@ -32,7 +32,46 @@
     const monthlySpendCard = doc.querySelector("#monthlySpend").closest(".monthly-spend-card");
     report("今月の支出をレシート履歴の最上部へ移動", doc.querySelector("#receiptHistoryView").firstElementChild === monthlySpendCard && !doc.querySelector("[data-panel='receipts'] #monthlySpend") && doc.querySelector("[data-panel='receipts'] #receiptMonth"));
     report("390px幅でChatGPTコピー・貼り付け・ファイルUIが横にはみ出さない", doc.documentElement.scrollWidth <= doc.documentElement.clientWidth && doc.querySelector("#copyChatGptPromptButton") && doc.querySelector("#chatGptReceiptJson") && doc.querySelector("#pasteClipboardButton") && doc.querySelector("#chatGptJsonFileInput") && doc.querySelector("#importChatGptJsonButton"));
+    report("レシート取り込みをやさしい言葉で案内", doc.querySelector("#importChatGptJsonButton").textContent.trim() === "解析結果を読み込む" && doc.querySelector("#chatGptImportPreviewTitle").textContent.trim() === "読み込んだ内容" && doc.querySelector("#chatGptReceiptJson").placeholder.includes("ChatGPTの回答"));
     report("商品がある初期状態では追加フォームを折りたたむ", doc.querySelector("#addItemPanel").tagName === "DETAILS" && !doc.querySelector("#addItemPanel").open);
+    const compactCardResults = [];
+    for (const width of [320, 375, 390]) {
+      frame.style.width = `${width}px`;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const compactCard = doc.querySelector("#shoppingList .shopping-item");
+      compactCard.querySelector(".item-name").textContent = "とても長い商品名でも横にはみ出さずに表示できる商品";
+      const cardRect = compactCard.getBoundingClientRect();
+      const purchaseRect = compactCard.querySelector(".purchase-button").getBoundingClientRect();
+      const mainRect = compactCard.querySelector(".item-main").getBoundingClientRect();
+      const quickRect = compactCard.querySelector(".item-quick-actions").getBoundingClientRect();
+      compactCardResults.push(
+        doc.documentElement.scrollWidth <= doc.documentElement.clientWidth
+        && compactCard.scrollWidth <= compactCard.clientWidth + 1
+        && cardRect.right <= doc.documentElement.clientWidth + 1
+        && win.getComputedStyle(compactCard.querySelector(".item-main")).gridRowStart === "1"
+        && win.getComputedStyle(compactCard.querySelector(".purchase-button")).gridRowStart === "1"
+        && quickRect.top >= Math.min(mainRect.bottom, purchaseRect.bottom)
+        && purchaseRect.width >= 70
+        && purchaseRect.height >= 44
+        && compactCard.querySelectorAll(".quantity-button").length === 2
+        && compactCard.querySelector(".item-more-menu [data-action='edit']")
+        && compactCard.querySelector(".item-more-menu [data-action='delete']")
+      );
+    }
+    report("320px・375px・390pxで商品カードを2段に収め操作を維持", compactCardResults.every(Boolean), compactCardResults.join(","));
+    frame.style.width = "390px";
+    runtime.ui.renderShoppingList();
+    let compactControlCard = [...doc.querySelectorAll("#shoppingList .shopping-item")].find((row) => row.textContent.includes("残す商品"));
+    compactControlCard.querySelector("[data-action='increase']").click();
+    compactControlCard = [...doc.querySelectorAll("#shoppingList .shopping-item")].find((row) => row.textContent.includes("残す商品"));
+    const increasedInCompactCard = compactControlCard.querySelector(".quantity-display strong").textContent === "6";
+    compactControlCard.querySelector("[data-action='decrease']").click();
+    compactControlCard = [...doc.querySelectorAll("#shoppingList .shopping-item")].find((row) => row.textContent.includes("残す商品"));
+    compactControlCard.querySelector(".item-more-menu").open = true;
+    compactControlCard.querySelector("[data-action='edit']").click();
+    const compactMenuWorks = increasedInCompactCard && doc.querySelector("#editDialog").open && doc.querySelector("#editName").value === "残す商品";
+    doc.querySelector("#cancelEditButton").click();
+    report("コンパクトカードで数量変更と編集メニューを利用可能", compactMenuWorks && runtime.shoppingManager.getListItems().find((item) => item.name === "残す商品")?.count === 5);
     doc.querySelector("#addItemPanel").open = true;
     const originalNameInput = doc.querySelector("#itemName");
     doc.querySelector("#itemName").value = "連続追加商品";
@@ -83,6 +122,12 @@
     runtime.ui.updateKeyboardState();
     await new Promise((resolve) => setTimeout(resolve, 220));
     report("キーボードを閉じた場合だけ下部タブを戻す", !doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity !== "0");
+    originalNameInput.focus();
+    runtime.ui.viewportMaxHeight = win.visualViewport.height + 300;
+    runtime.ui.updateKeyboardState();
+    originalNameInput.blur();
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    report("resizeイベントがなくても入力終了後に下部タブを必ず戻す", !runtime.ui.keyboardOpen && !doc.body.classList.contains("keyboard-open") && win.getComputedStyle(doc.querySelector(".tab-nav")).opacity !== "0");
 
     const cartItemRow = [...doc.querySelectorAll("#shoppingList [data-id]")].find((row) => row.textContent.includes("カゴ商品"));
     cartItemRow.querySelector("[data-action='purchase']").click();
@@ -234,7 +279,7 @@
     doc.querySelector("#chatGptReceiptJson").value = invalidInput;
     doc.querySelector("#importChatGptJsonButton").click();
     await waitFor(() => !doc.querySelector("#chatGptImportError").hidden);
-    report("構文エラー時も入力内容を保持して再編集可能", doc.querySelector("#chatGptImportError").dataset.errorCode === "JSON_SYNTAX" && doc.querySelector("#chatGptReceiptJson").value === invalidInput && doc.querySelector("#receiptEditor").hidden && (await runtime.receiptManager.getAll()).length === 1);
+    report("形式エラーを対処方法付きの日本語で表示し入力を保持", doc.querySelector("#chatGptImportError").dataset.errorCode === "JSON_SYNTAX" && doc.querySelector("#chatGptImportError").textContent.includes("最初からコピーし直して") && !doc.querySelector("#chatGptImportError").textContent.includes("構文") && doc.querySelector("#chatGptReceiptJson").value === invalidInput && doc.querySelector("#receiptEditor").hidden && (await runtime.receiptManager.getAll()).length === 1);
 
     Object.defineProperty(win.navigator, "clipboard", { configurable:true, value:{ writeText:async (value) => { copiedPrompt = value; }, readText:async () => JSON.stringify(lifeJson) } });
     await runtime.receiptUI.pasteFromClipboard();
@@ -265,8 +310,8 @@
     report("JSON復元", runtime.shoppingManager.getListItems().some((item) => item.name === "残す商品") && (await runtime.receiptManager.getAll()).length === 1);
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v4.3.0");
-    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.3.0"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
+    const cache = await win.caches.open("shopping-app-v4.4.0");
+    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.4.0"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
     report("新しい取り込み機能をオフラインキャッシュしOCR資産を除外", Boolean(managerScript) && !oldTesseract);
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
     report("不要な外部通信なし", foreign.length === 0, foreign.join(", "));

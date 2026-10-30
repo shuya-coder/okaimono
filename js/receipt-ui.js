@@ -178,20 +178,22 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   showImportError(error) {
-    const labels = {
-      JSON_NOT_FOUND: "JSONが見つかりません",
-      JSON_SYNTAX: "JSON構文エラー",
-      REQUIRED_FIELD_MISSING: "必須項目が不足しています",
-      TYPE_MISMATCH: "データ型が違います",
-      INVALID_CATEGORY: "カテゴリが不正です",
-      NUMBER_OUT_OF_RANGE: "数値またはサイズが範囲外です",
-      SCHEMA_MISMATCH: "スキーマが一致しません",
-      AMBIGUOUS_JSON: "JSON候補を選択してください",
-      CLIPBOARD_UNAVAILABLE: "クリップボードを利用できません",
-    };
     const code = error.code || "JSON_SYNTAX";
+    const messages = {
+      JSON_NOT_FOUND: "解析結果が見つかりません。ChatGPTの回答を入力欄に貼り付けてから、もう一度お試しください。",
+      JSON_SYNTAX: error.message?.includes("ファイル")
+        ? "ファイルを読み込めませんでした。UTF-8形式の解析結果ファイルを選び直すか、内容を入力欄へ貼り付けてください。"
+        : "解析結果の形式が正しくありません。ChatGPTの回答を最初からコピーし直して、入力欄へ貼り付けてください。",
+      REQUIRED_FIELD_MISSING: "レシートの情報が足りません。解析指示をもう一度コピーし、ChatGPTで解析し直してください。",
+      TYPE_MISMATCH: "読み取れない項目があります。解析指示をもう一度コピーし、ChatGPTで解析し直してください。",
+      INVALID_CATEGORY: "カテゴリー名を読み取れません。解析指示をもう一度コピーし、ChatGPTで解析し直してください。",
+      NUMBER_OUT_OF_RANGE: "入力内容が大きすぎるか、金額・数量を読み取れません。内容を確認してから、もう一度お試しください。",
+      SCHEMA_MISMATCH: "このアプリ用の解析結果ではありません。アプリの「解析指示をコピー」からやり直してください。",
+      AMBIGUOUS_JSON: "解析結果が複数あります。使用するレシートを1つ選んでください。",
+      CLIPBOARD_UNAVAILABLE: "クリップボードを直接読み取れませんでした。入力欄を長押しして「ペースト」を選んでください。入力済みの内容は消えません。",
+    };
     this.elements.chatGptImportError.dataset.errorCode = code;
-    this.elements.chatGptImportError.textContent = `${labels[code] || "読み込みエラー"}: ${error.message || "JSONを読み込めませんでした。"}`;
+    this.elements.chatGptImportError.textContent = messages[code] || "解析結果を読み込めませんでした。入力内容を確認して、もう一度お試しください。";
     this.elements.chatGptImportError.hidden = false;
   }
 
