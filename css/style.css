@@ -235,6 +235,32 @@ h2 {
   font-weight: 800;
 }
 
+.add-card-header {
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 12px 14px;
+}
+
+.add-card-header strong,
+.add-card-header small {
+  display: block;
+}
+
+.add-card-header strong {
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: -.015em;
+}
+
+.add-card-header small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
 .chevron {
   display: inline-grid;
   place-items: center;
@@ -988,6 +1014,11 @@ body.dark-mode .warning-message { background: #3d3316; color: #ffe89a; }
   }
 
   .collapsible-card summary {
+    min-height: 54px;
+    padding: 10px 12px;
+  }
+
+  .add-card-header {
     min-height: 54px;
     padding: 10px 12px;
   }
