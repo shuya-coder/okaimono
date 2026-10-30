@@ -46,16 +46,26 @@ window.ShoppingApp.ReceiptDB = class ReceiptDB {
     });
   }
 
-  getAllReceipts() {
-    return this.run("receipts", "readonly", (store) => store.getAll());
+  async getAllReceipts() {
+    const receipts = await this.run("receipts", "readonly", (store) => store.getAll());
+    const sanitized = receipts.map((receipt) => this.sanitizeReceipt(receipt));
+    const changed = receipts.some((receipt) => this.hasTransientData(receipt));
+    if (changed) {
+      await Promise.all(sanitized.map((receipt) => this.saveReceipt(receipt)));
+    }
+    return sanitized;
   }
 
-  getReceipt(id) {
-    return this.run("receipts", "readonly", (store) => store.get(id));
+  async getReceipt(id) {
+    const receipt = await this.run("receipts", "readonly", (store) => store.get(id));
+    if (!receipt) return receipt;
+    const sanitized = this.sanitizeReceipt(receipt);
+    if (this.hasTransientData(receipt) || "rawText" in receipt) await this.saveReceipt(sanitized);
+    return sanitized;
   }
 
   saveReceipt(receipt) {
-    return this.run("receipts", "readwrite", (store) => store.put(receipt));
+    return this.run("receipts", "readwrite", (store) => store.put(this.sanitizeReceipt(receipt)));
   }
 
   deleteReceipt(id) {
@@ -78,7 +88,7 @@ window.ShoppingApp.ReceiptDB = class ReceiptDB {
       const mappingStore = transaction.objectStore("mappings");
       receiptStore.clear();
       mappingStore.clear();
-      receipts.forEach((receipt) => receiptStore.put(receipt));
+      receipts.forEach((receipt) => receiptStore.put(this.sanitizeReceipt(receipt)));
       mappings.forEach((mapping) => mappingStore.put(mapping));
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
@@ -87,5 +97,44 @@ window.ShoppingApp.ReceiptDB = class ReceiptDB {
 
   async clearAll() {
     await this.replaceAll({ receipts: [], mappings: [] });
+  }
+
+  sanitizeReceipt(receipt) {
+    if (!receipt || typeof receipt !== "object") return receipt;
+    return this.sanitizeObject(receipt);
+  }
+
+  sanitizeItem(item) {
+    if (!item || typeof item !== "object") return item;
+    return this.sanitizeObject(item);
+  }
+
+  sanitizeObject(object) {
+    return Object.fromEntries(
+      Object.entries(object).flatMap(([key, value]) => {
+        if (this.isTransientKey(key) || this.isImageValue(value)) return [];
+        if (Array.isArray(value)) return [[key, value.map((item) => item && typeof item === "object" ? this.sanitizeObject(item) : item)]];
+        if (value && typeof value === "object") return [[key, this.sanitizeObject(value)]];
+        return [[key, value]];
+      })
+    );
+  }
+
+  hasTransientData(value) {
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value).some(([key, child]) => {
+      if (this.isTransientKey(key) || this.isImageValue(child)) return true;
+      if (Array.isArray(child)) return child.some((item) => this.hasTransientData(item));
+      return child && typeof child === "object" ? this.hasTransientData(child) : false;
+    });
+  }
+
+  isTransientKey(key) {
+    return /^(rawText|image|imageData|receiptImage|photo|photoData|blob|file)$/i.test(String(key));
+  }
+
+  isImageValue(value) {
+    if (typeof value === "string" && /^data:image\//i.test(value)) return true;
+    return typeof Blob !== "undefined" && value instanceof Blob;
   }
 };

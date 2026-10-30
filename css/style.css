@@ -956,6 +956,7 @@ body.dark-mode .error-message { background: #3d1e1e; color: #ffb6b6; }
 .json-candidate-card small { overflow-wrap: anywhere; color: var(--muted); }
 .receipt-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .receipt-items-editor, .receipt-list, .summary-list, .price-history { display: grid; gap: 8px; }
+.price-history-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr); gap: 10px; margin-bottom: 12px; }
 .receipt-item-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
 .receipt-item-name, .receipt-item-category { grid-column: 1 / -1; }
 .receipt-item-editor .small-button { align-self: end; }
@@ -979,7 +980,7 @@ body.dark-mode .warning-message { background: #3d3316; color: #ffe89a; }
   .monthly-spend-card { grid-template-columns: 1fr; }
   .monthly-spend-card label, .monthly-spend-card input { grid-column: 1; grid-row: auto; }
   .monthly-spend-card label { margin-top: 10px; }
-  .receipt-fields, .receipt-import-actions, .json-input-actions, .receipt-search-row { grid-template-columns: 1fr; }
+  .receipt-fields, .receipt-import-actions, .json-input-actions, .receipt-search-row, .price-history-controls { grid-template-columns: 1fr; }
 }
 
 /* Mobile-first polish: readable controls and comfortable one-handed operation. */

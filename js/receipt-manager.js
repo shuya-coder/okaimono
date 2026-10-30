@@ -43,7 +43,6 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
       deposit: this.nullableNumber(receipt.deposit, 0),
       total: this.nullableNumber(receipt.total, 0),
       notes: String(receipt.notes || ""),
-      rawText: String(receipt.rawText || ""),
       source: receipt.source === "chatgpt-json" ? "chatgpt-json" : String(receipt.source || "manual"),
       needsReview: Boolean(receipt.needsReview || items.some((item) => item.uncertain)),
       createdAt: receipt.createdAt || new Date().toISOString(),

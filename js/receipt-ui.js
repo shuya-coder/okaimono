@@ -10,6 +10,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.currentReceiptMeta = {};
     this.pendingImportCandidates = [];
     this.search = "";
+    this.priceHistorySearch = "";
     this.monthFilter = "";
     this.monthFilterInitialized = false;
     this.monthFilterUserSelected = false;
@@ -23,7 +24,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistoryProduct", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
@@ -51,6 +52,11 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       this.renderReceiptList();
     });
     this.elements.receiptList.addEventListener("click", (event) => this.handleReceiptAction(event));
+    this.elements.priceHistorySearch.addEventListener("input", (event) => {
+      this.priceHistorySearch = event.target.value;
+      this.renderProductOptions();
+      this.renderPriceHistory();
+    });
     this.elements.priceHistoryProduct.addEventListener("change", () => this.renderPriceHistory());
   }
 
@@ -329,7 +335,6 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       tax: this.elements.receiptTax.value,
       total: this.elements.receiptTotal.value,
       notes: this.elements.receiptNotes.value,
-      rawText: this.elements.receiptRawText.textContent.startsWith("手入力") ? "" : this.elements.receiptRawText.textContent,
       needsReview: this.currentItems.some((item) => item.uncertain),
     });
     this.closeEditor();
@@ -392,15 +397,27 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.renderGroupedSummary(this.elements.dailySpend, receipts, (receipt) => this.localDateKey(receipt.purchasedAt).slice(5).replace("-", "/"));
     this.renderGroupedSummary(this.elements.storeSpend, receipts, (receipt) => receipt.storeName || "店舗不明");
     const categoryTotals = new Map();
-    receipts.flatMap((receipt) => receipt.items).forEach((item) => categoryTotals.set(item.categoryId, (categoryTotals.get(item.categoryId) || 0) + item.amount));
-    const categoryRows = [...categoryTotals.entries()].map(([id, amount]) => ({ label: this.categoryManager.findById(id)?.name || "未分類", amount }));
+    receipts.flatMap((receipt) => receipt.items).forEach((item) => {
+      const label = this.categoryManager.findById(item.categoryId)?.name || "未分類";
+      const key = this.normalizeSummaryKey(label);
+      const current = categoryTotals.get(key) || { label, amount: 0 };
+      current.amount += Number(item.amount) || 0;
+      categoryTotals.set(key, current);
+    });
+    const categoryRows = [...categoryTotals.values()];
     this.elements.categorySpend.innerHTML = this.summaryRows(categoryRows);
   }
 
   renderGroupedSummary(element, receipts, keyOf) {
     const totals = new Map();
-    receipts.forEach((receipt) => totals.set(keyOf(receipt), (totals.get(keyOf(receipt)) || 0) + receipt.total));
-    element.innerHTML = this.summaryRows([...totals.entries()].map(([label, amount]) => ({ label, amount })));
+    receipts.forEach((receipt) => {
+      const label = String(keyOf(receipt) || "不明").trim() || "不明";
+      const key = this.normalizeSummaryKey(label);
+      const current = totals.get(key) || { label, amount: 0 };
+      current.amount += Number(receipt.total) || 0;
+      totals.set(key, current);
+    });
+    element.innerHTML = this.summaryRows([...totals.values()]);
   }
 
   summaryRows(rows) {
@@ -422,10 +439,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     });
     this.elements.receiptList.innerHTML = [...groups.entries()]
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([dateKey, receipts], index) => {
+      .map(([dateKey, receipts]) => {
         const dailyTotal = receipts.reduce((sum, receipt) => sum + receipt.total, 0);
         return `
-          <details class="history-day receipt-day" ${index === 0 ? "open" : ""}>
+          <details class="history-day receipt-day">
             <summary>
               <span><strong>${this.formatDateHeader(dateKey)}</strong><small>${receipts.length}件・合計 ¥${this.formatMoney(dailyTotal)}</small></span>
               <span class="chevron" aria-hidden="true">⌄</span>
@@ -455,9 +472,13 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderProductOptions() {
-    const names = [...new Set((this.receipts || []).flatMap((receipt) => receipt.items.map((item) => item.name)))].sort((a, b) => a.localeCompare(b, "ja"));
+    const query = this.normalizeSummaryKey(this.priceHistorySearch);
+    const names = [...new Set((this.receipts || []).flatMap((receipt) => receipt.items.map((item) => item.name)))]
+      .filter((name) => !query || this.normalizeSummaryKey(name).includes(query))
+      .sort((a, b) => a.localeCompare(b, "ja"));
     const current = this.elements.priceHistoryProduct.value;
-    this.elements.priceHistoryProduct.innerHTML = `<option value="">商品を選択</option>${names.map((name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`).join("")}`;
+    const emptyLabel = query && names.length === 0 ? "候補がありません" : "商品を選択";
+    this.elements.priceHistoryProduct.innerHTML = `<option value="">${emptyLabel}</option>${names.map((name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`).join("")}`;
     if (names.includes(current)) this.elements.priceHistoryProduct.value = current;
   }
 
@@ -517,6 +538,10 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     const [year, month] = String(monthKey || "").split("-");
     if (!year || !month) return "月不明";
     return `${Number(year)}年${Number(month)}月`;
+  }
+
+  normalizeSummaryKey(value) {
+    return String(value || "").normalize("NFKC").toLocaleLowerCase("ja-JP").replace(/\s+/g, " ").trim();
   }
 
   formatDateHeader(dateKey) { return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(`${dateKey}T00:00:00`)); }
