@@ -153,7 +153,7 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
   getChatGptPrompt() {
     const categories = this.categoryManager.getAll().map((category) => category.name);
     const schema = this.getChatGptSchema();
-    return `添付したレシート写真を読み取り、次のJSONスキーマに厳密に従って出力してください。\n\n${JSON.stringify(schema, null, 2)}\n\nルール:\n- 回答はMarkdownの\`\`\`jsonコードブロック1つだけとし、その中にJSONオブジェクトだけを入れる。説明文は付けない。\n- 写真から確認できない値はnullにし、推測した数値を確定値として書かない。\n- 金額は円単位の数値とし、通貨記号やカンマを含めない。値引額discountは正の数値で記録する。\n- subtotalはレシートに印字された小計または商品合計をそのまま記録し、値引きを独自に足し引きして作らない。\n- includedTaxは小計や商品金額に含まれる内税で、合計計算時に加算しない。\n- externalTaxは別途加算される外税で、合計計算時に一度だけ扱う。\n- 商品ごとのamountはその商品の数量分を含む商品別金額とする。\n- 不確かな項目名をuncertainFieldsへ入れる。\n- カテゴリは次のいずれかを使う: ${categories.join("、")}。判断できない場合は「未分類」にする。\n- 商品ではない小計、値引き、税額、合計、預り金、釣銭をitemsへ入れない。\n- 日時は日本時間のISO 8601形式で記録する。`;
+    return `添付したレシート写真を読み取り、次の1件分のJSONスキーマに厳密に従って出力してください。\n\n${JSON.stringify(schema, null, 2)}\n\n出力形式:\n- 写真が1枚の場合は、Markdownの\`\`\`jsonコードブロック1つの中に、このスキーマのJSONオブジェクトを1つ出力する。\n- 写真が複数枚の場合は、写真ごとに別のレシートとして解析し、同じスキーマのJSONオブジェクトを写真の順番でJSON配列へ入れる。\n- 複数枚の例: [{ 1枚目のokaimono-receipt-v1オブジェクト }, { 2枚目のokaimono-receipt-v1オブジェクト }]\n- 説明文は付けず、コードブロック内にはJSONだけを入れる。複数枚の内容を1件へまとめない。\n\nルール:\n- 写真から確認できない値はnullにし、推測した数値を確定値として書かない。\n- 金額は円単位の数値とし、通貨記号やカンマを含めない。値引額discountは正の数値で記録する。\n- subtotalはレシートに印字された小計または商品合計をそのまま記録し、値引きを独自に足し引きして作らない。\n- includedTaxは小計や商品金額に含まれる内税で、合計計算時に加算しない。\n- externalTaxは別途加算される外税で、合計計算時に一度だけ扱う。\n- 商品ごとのamountはその商品の数量分を含む商品別金額とする。\n- 不確かな項目名をuncertainFieldsへ入れる。\n- カテゴリは次のいずれかを使う: ${categories.join("、")}。判断できない場合は「未分類」にする。\n- 商品ではない小計、値引き、税額、合計、預り金、釣銭をitemsへ入れない。\n- 日時は日本時間のISO 8601形式で記録する。`;
   }
 
   async importChatGptJson(input) {
@@ -186,23 +186,33 @@ window.ShoppingApp.ReceiptManager = class ReceiptManager {
     const validCandidates = [];
     const validationErrors = [];
     for (const candidate of parsedCandidates) {
-      try {
-        this.validateChatGptReceipt(candidate.data);
-        validCandidates.push({
-          index: candidate.index,
-          data: candidate.data,
-          rawText: candidate.rawText,
-          receipt: await this.convertChatGptData(candidate.data),
-        });
-      } catch (error) {
-        validationErrors.push({ error, data: candidate.data });
+      const entries = Array.isArray(candidate.data) ? candidate.data : [candidate.data];
+      if (entries.length > 100) throw this.createImportError("NUMBER_OUT_OF_RANGE", "一度に読み込めるレシートは100件以内です。");
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+        const data = entries[entryIndex];
+        try {
+          this.validateChatGptReceipt(data);
+          validCandidates.push({
+            index: candidate.index,
+            entryIndex,
+            data,
+            rawText: JSON.stringify(data, null, 2),
+            receipt: await this.convertChatGptData(data),
+          });
+        } catch (error) {
+          validationErrors.push({ error, data, index: candidate.index, entryIndex });
+        }
       }
     }
     if (validCandidates.length === 0) {
       const schemaLikeError = validationErrors.find(({ data }) => data && typeof data === "object" && !Array.isArray(data) && ("schemaVersion" in data || "items" in data));
       throw schemaLikeError?.error || validationErrors[0]?.error || syntaxErrors[0] || this.createImportError("SCHEMA_MISMATCH", "既存スキーマに適合するJSONがありませんでした。");
     }
-    return { candidates: validCandidates, ignoredCandidateCount: parsedCandidates.length - validCandidates.length + syntaxErrors.length };
+    return {
+      candidates: validCandidates,
+      invalidCandidates: validationErrors.map(({ error, index, entryIndex }) => ({ index, entryIndex, code: error.code, message: error.message })),
+      ignoredCandidateCount: validationErrors.length + syntaxErrors.length,
+    };
   }
 
   async convertChatGptData(data) {

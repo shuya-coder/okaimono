@@ -19,6 +19,7 @@
     const win = frame.contentWindow; const doc = frame.contentDocument;
     const runtime = await waitFor(() => win.ShoppingApp?.runtime);
     await waitFor(() => runtime.receiptUI.receipts);
+    const visibleNextReceiptButtons = () => [...doc.querySelectorAll(".receipt-capture-card .flow-main-button.is-next")].filter((button) => !button.closest("[hidden]") && win.getComputedStyle(button).display !== "none");
     report("既存カートを買い物リストへ安全に移行", doc.querySelector("#shoppingList").textContent.includes("残す商品") && doc.querySelector("#shoppingList").textContent.includes("カゴ商品") && !doc.querySelector("#basketPanel") && runtime.shoppingManager.getCartItems().length === 0 && runtime.shoppingManager.getListItems().find((item) => item.name === "残す商品")?.count === 5);
     report("既存の累計購入商品を保持", doc.querySelector("#purchasedList").textContent.includes("過去商品") && runtime.purchasedManager.getAll().find((item) => item.name === "過去商品")?.purchaseCount === 2);
     report("購入日不明データへ架空の日付を付けない", runtime.purchasedManager.getAll().find((item) => item.name === "日付不明商品")?.lastPurchasedAt === null && doc.querySelector("#purchasedList").textContent.includes("購入日不明"));
@@ -33,7 +34,19 @@
     const monthlySpendCard = doc.querySelector("#monthlySpend").closest(".monthly-spend-card");
     report("選択月の支出をレシート履歴の最上部へ表示", doc.querySelector("#receiptHistoryView").firstElementChild === monthlySpendCard && !doc.querySelector("[data-panel='receipts'] #monthlySpend") && !doc.querySelector("#receiptMonth") && doc.querySelector("#analysisPeriodLabel"));
     report("390px幅でChatGPTコピー・貼り付け・ファイルUIが横にはみ出さない", doc.documentElement.scrollWidth <= doc.documentElement.clientWidth && doc.querySelector("#copyChatGptPromptButton") && doc.querySelector("#chatGptReceiptJson") && doc.querySelector("#pasteClipboardButton") && doc.querySelector("#chatGptJsonFileInput") && doc.querySelector("#importChatGptJsonButton"));
-    report("レシート取り込みをやさしい言葉で案内", doc.querySelector("#importChatGptJsonButton").textContent.trim() === "解析結果を読み込む" && doc.querySelector("#chatGptImportPreviewTitle").textContent.trim() === "読み込んだ内容" && doc.querySelector("#chatGptReceiptJson").placeholder.includes("ChatGPTの回答"));
+    report("レシート登録を3段階で案内し最初の操作だけを強調", doc.querySelector("#receiptFlowProgress").textContent.includes("解析") && doc.querySelector("#receiptFlowProgress").textContent.includes("貼り付け") && doc.querySelector("#receiptFlowProgress").textContent.includes("保存") && doc.querySelector("#receiptFlowProgress").dataset.currentStep === "1" && doc.querySelector("#copyChatGptPromptButton").textContent.trim() === "① ChatGPTで解析する" && visibleNextReceiptButtons().length === 1 && visibleNextReceiptButtons()[0] === doc.querySelector("#copyChatGptPromptButton") && doc.querySelector("#chatGptJsonFileInput").closest("details").classList.contains("receipt-other-methods") && doc.querySelector("#manualReceiptButton").closest("details").classList.contains("receipt-other-methods"));
+    runtime.ui.switchTab("receipts");
+    const receiptFlowWidthResults = [];
+    for (const width of [320, 375, 390]) {
+      frame.style.width = `${width}px`;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const flowCard = doc.querySelector(".receipt-capture-card");
+      const progressRect = doc.querySelector("#receiptFlowProgress").getBoundingClientRect();
+      const mainButtonRect = doc.querySelector("#copyChatGptPromptButton").getBoundingClientRect();
+      receiptFlowWidthResults.push(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth && flowCard.scrollWidth <= flowCard.clientWidth + 1 && progressRect.right <= doc.documentElement.clientWidth + 1 && mainButtonRect.right <= doc.documentElement.clientWidth + 1 && mainButtonRect.height >= 48);
+    }
+    report("320px・375px・390pxで3段階登録UIがはみ出さず片手操作できる", receiptFlowWidthResults.every(Boolean), receiptFlowWidthResults.join(","));
+    runtime.ui.switchTab("shopping");
     report("商品がある初期状態では追加フォームを折りたたむ", doc.querySelector("#addItemPanel").tagName === "DETAILS" && !doc.querySelector("#addItemPanel").open);
     const compactCardResults = [];
     for (const width of [320, 375, 390]) {
@@ -317,11 +330,11 @@
     await runtime.receiptUI.renderAll();
     report("削除後も選択月の支出と分析を即時更新", doc.querySelector("#receiptMonthFilter").value === "2026-10" && doc.querySelector("#monthlySpend").textContent.includes("1,100") && !doc.querySelector("#receiptList").textContent.includes("月境界店") && doc.querySelector("#storeSpend").textContent.includes("テスト店"));
     const prompt = runtime.receiptManager.getChatGptPrompt();
-    report("ChatGPT解析指示に共通JSONスキーマとjsonコードブロック指定を含む", prompt.includes("okaimono-receipt-v1") && prompt.includes("includedTax") && prompt.includes("externalTax") && prompt.includes("食料品、日用品、未分類") && prompt.includes("```json") && prompt.includes("推測した数値を確定値として書かない"));
+    report("ChatGPT解析指示に単一・複数レシート形式と共通スキーマを含む", prompt.includes("okaimono-receipt-v1") && prompt.includes("includedTax") && prompt.includes("externalTax") && prompt.includes("食料品、日用品、未分類") && prompt.includes("```json") && prompt.includes("写真が複数枚") && prompt.includes("JSON配列") && prompt.includes("推測した数値を確定値として書かない"));
     let copiedPrompt = "";
     Object.defineProperty(win.navigator, "clipboard", { configurable: true, value: { writeText: async (value) => { copiedPrompt = value; } } });
     await runtime.receiptUI.copyChatGptPrompt();
-    report("解析指示をクリップボードへコピー", copiedPrompt === prompt && doc.querySelector("#toast").textContent.includes("コピー"));
+    report("解析指示をコピー後は貼り付け工程だけを強調", copiedPrompt === prompt && doc.querySelector("#toast").textContent.includes("コピー") && doc.querySelector("#receiptFlowProgress").dataset.currentStep === "2" && doc.querySelector("#receiptFlowProgress [data-flow-indicator='1']").classList.contains("is-complete") && doc.querySelector("#pasteClipboardButton").classList.contains("is-next") && visibleNextReceiptButtons().length === 1 && visibleNextReceiptButtons()[0] === doc.querySelector("#pasteClipboardButton"));
 
     const item = (name, quantity, unitPrice, amount, category = "未分類") => ({ name, quantity, unitPrice, amount, category, uncertainFields: [] });
     const shimamuraJson = {
@@ -336,9 +349,11 @@
     const explainedAnalysis = await runtime.receiptManager.analyzeChatGptInput(`解析結果です。文字列には {波括弧} もあります。\n\`\`\`json\n${JSON.stringify(braceJson)}\n\`\`\`\n内容を確認してください。`);
     report("純粋JSON・コードブロック・説明文付きJSONを抽出", pureAnalysis.candidates[0].receipt.items[0].name === braceName && fencedAnalysis.candidates[0].receipt.items[0].name === braceName && explainedAnalysis.candidates[0].receipt.items[0].name === braceName);
     doc.querySelector("#chatGptReceiptJson").value = JSON.stringify(shimamuraJson);
+    doc.querySelector("#chatGptReceiptJson").dispatchEvent(new Event("input", { bubbles:true }));
+    report("解析結果を貼り付けると内容確認ボタンだけを強調", !doc.querySelector("#importChatGptJsonButton").disabled && doc.querySelector("#importChatGptJsonButton").classList.contains("is-next") && doc.querySelector("#importChatGptJsonButton").textContent.includes("次へ") && visibleNextReceiptButtons().length === 1 && visibleNextReceiptButtons()[0] === doc.querySelector("#importChatGptJsonButton"));
     doc.querySelector("#importChatGptJsonButton").click();
     await waitFor(() => !doc.querySelector("#chatGptImportPreview").hidden);
-    report("正常なJSONを読み込むと入力欄だけを自動クリア", doc.querySelectorAll("#chatGptImportCandidates .json-candidate-card").length === 1 && doc.querySelector("#chatGptImportCandidates").textContent.includes("しまむら宮野木店") && doc.querySelector("#chatGptReceiptJson").value === "");
+    report("正常な解析結果は入力欄をクリアし保存工程を強調", doc.querySelectorAll("#chatGptImportCandidates .json-candidate-card").length === 1 && doc.querySelector("#chatGptImportCandidates").textContent.includes("しまむら宮野木店") && doc.querySelector("#chatGptReceiptJson").value === "" && doc.querySelector("#receiptFlowProgress").dataset.currentStep === "3" && doc.querySelector("#saveAllImportedReceiptsButton").textContent === "③ この内容で保存" && doc.querySelectorAll(".receipt-capture-card .flow-main-button.is-next").length === 1);
     doc.querySelector("#confirmChatGptImportButton").click();
     await waitFor(() => doc.querySelectorAll("#receiptItemsEditor .receipt-item-editor").length === 10);
     report("入力欄クリア後も10商品の確認・編集内容を保持", doc.querySelector("#receiptStore").value === "しまむら宮野木店" && doc.querySelector("#receiptSubtotal").value === "11990" && doc.querySelector("#receiptDiscount").value === "100" && doc.querySelector("#receiptTotal").value === "11890" && doc.querySelector("#receiptDifferenceWarning").hidden && doc.querySelector("#chatGptReceiptJson").value === "");
@@ -366,6 +381,32 @@
     doc.querySelector("#confirmChatGptImportButton").click();
     report("選択したJSON候補だけを編集画面へ反映", doc.querySelector("#receiptStore").value === "ライフ 宮野木店" && doc.querySelectorAll("#receiptItemsEditor .receipt-item-editor").length === 16);
     runtime.receiptUI.closeEditor();
+    const batchFirst = { ...shimamuraJson, storeName:"一括店A", purchasedAt:"2026-08-01T10:00:00+09:00" };
+    const batchSecond = { ...lifeJson, storeName:"一括店B", purchasedAt:"2026-08-02T11:00:00+09:00" };
+    const batchInput = JSON.stringify([batchFirst, batchSecond]);
+    const batchAnalysis = await runtime.receiptManager.analyzeChatGptInput(batchInput);
+    report("okaimono-receipt-v1配列をレシートごとに展開", batchAnalysis.candidates.length === 2 && batchAnalysis.candidates[0].receipt.storeName === "一括店A" && batchAnalysis.candidates[1].receipt.storeName === "一括店B");
+    doc.querySelector("#chatGptReceiptJson").value = batchInput;
+    await runtime.receiptUI.importChatGptJson();
+    report("複数レシートの件数・店舗・日時・合計をプレビュー", doc.querySelector("#chatGptImportPreviewSummary").textContent === "2件" && doc.querySelector("#chatGptImportPreviewHelp").textContent.includes("2件のレシート") && doc.querySelector("#chatGptImportCandidates").textContent.includes("一括店A") && doc.querySelector("#chatGptImportCandidates").textContent.includes("一括店B") && doc.querySelector("#chatGptImportCandidates").textContent.includes("11,890") && doc.querySelector("#chatGptImportCandidates").textContent.includes("4,901"));
+    doc.querySelector("[data-action='edit-import'][data-index='0']").click();
+    doc.querySelector("#receiptStore").value = "一括店A 修正";
+    doc.querySelector("#receiptForm").dispatchEvent(new Event("submit", { bubbles:true, cancelable:true }));
+    report("一括候補を個別編集してプレビューへ反映", doc.querySelector("#receiptEditor").hidden && doc.querySelector("#chatGptImportCandidates").textContent.includes("一括店A 修正") && runtime.receiptUI.pendingImportCandidates[1].receipt.storeName === "一括店B");
+    doc.querySelector("[data-action='toggle-import'][data-index='1']").click();
+    report("不要なレシートだけ除外", runtime.receiptUI.pendingImportCandidates[1].excluded && doc.querySelector("#saveAllImportedReceiptsButton").textContent === "③ すべて保存");
+    await runtime.receiptUI.saveAllImportedReceipts();
+    const batchSaved = (await runtime.receiptManager.getAll()).find((receipt) => receipt.storeName === "一括店A 修正");
+    report("すべて保存で対象だけ保存し登録導線を最初へ戻す", Boolean(batchSaved) && !(await runtime.receiptManager.getAll()).some((receipt) => receipt.storeName === "一括店B") && runtime.receiptUI.pendingImportCandidates.length === 0 && doc.querySelector("#chatGptImportPreview").hidden && doc.querySelector("#receiptFlowProgress").dataset.currentStep === "1");
+    if (batchSaved) await runtime.receiptManager.db.deleteReceipt(batchSaved.id);
+    const invalidBatchEntry = { ...batchSecond, total:"4901" };
+    const partialInput = JSON.stringify([batchFirst, invalidBatchEntry]);
+    const partialAnalysis = await runtime.receiptManager.analyzeChatGptInput(partialInput);
+    report("配列内の1件が不正でも正常なレシートを保持", partialAnalysis.candidates.length === 1 && partialAnalysis.invalidCandidates.length === 1 && partialAnalysis.invalidCandidates[0].code === "TYPE_MISMATCH");
+    doc.querySelector("#chatGptReceiptJson").value = partialInput;
+    await runtime.receiptUI.importChatGptJson();
+    report("一部エラー時は正常候補と修正案内を表示し入力を保持", doc.querySelector("#chatGptImportCandidates").textContent.includes("一括店A") && doc.querySelector("#chatGptImportCandidates").textContent.includes("読み込めませんでした") && doc.querySelector("#chatGptReceiptJson").value === partialInput);
+    runtime.receiptUI.clearImportPreview();
     const jsonFile = new win.File([JSON.stringify(shimamuraJson)], "receipt.json", { type:"application/json" });
     await runtime.receiptUI.loadJsonFile({ target:{ files:[jsonFile], value:"selected" } });
     report("UTF-8 JSONファイルを読み込みプレビュー後に入力欄をクリア", doc.querySelector("#jsonFileName").textContent.includes("receipt.json") && doc.querySelector("#chatGptReceiptJson").value === "" && !doc.querySelector("#chatGptImportPreview").hidden);
@@ -405,6 +446,7 @@
 
     const invalidInput = '{"schemaVersion":';
     doc.querySelector("#chatGptReceiptJson").value = invalidInput;
+    doc.querySelector("#chatGptReceiptJson").dispatchEvent(new Event("input", { bubbles:true }));
     doc.querySelector("#importChatGptJsonButton").click();
     await waitFor(() => !doc.querySelector("#chatGptImportError").hidden);
     report("形式エラーを対処方法付きの日本語で表示し入力を保持", doc.querySelector("#chatGptImportError").dataset.errorCode === "JSON_SYNTAX" && doc.querySelector("#chatGptImportError").textContent.includes("最初からコピーし直して") && !doc.querySelector("#chatGptImportError").textContent.includes("構文") && doc.querySelector("#chatGptReceiptJson").value === invalidInput && doc.querySelector("#receiptEditor").hidden && (await runtime.receiptManager.getAll()).length === 1);
@@ -467,8 +509,8 @@
     runtime.ui.switchTab("shopping");
     const registrations = await win.navigator.serviceWorker.getRegistrations();
     report("Service Worker登録", registrations.length > 0);
-    const cache = await win.caches.open("shopping-app-v4.8.1");
-    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.8.1"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
+    const cache = await win.caches.open("shopping-app-v4.9.0");
+    const [managerScript, oldTesseract] = await Promise.all([cache.match("/js/receipt-manager.js?v=4.9.0"), cache.match("/vendor/tesseract/tesseract.min.js?v=7.0.0")]);
     report("新しい取り込み機能をオフラインキャッシュしOCR資産を除外", Boolean(managerScript) && !oldTesseract);
     const foreign = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name).origin).filter((origin) => origin !== location.origin);
     report("不要な外部通信なし", foreign.length === 0, foreign.join(", "));

@@ -1,4 +1,4 @@
-const APP_VERSION = "4.8.1";
+const APP_VERSION = "4.9.0";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const { Storage, CategoryManager, ShoppingManager, PurchasedManager, ReceiptDB, ReceiptManager, ReceiptUI, UI } = window.ShoppingApp;

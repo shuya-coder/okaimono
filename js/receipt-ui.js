@@ -8,7 +8,11 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.showReceiptEditor = showReceiptEditor;
     this.currentItems = [];
     this.currentReceiptMeta = {};
+    this.currentImportIndex = null;
     this.pendingImportCandidates = [];
+    this.pendingInvalidCandidates = [];
+    this.receiptFlowStage = 1;
+    this.receiptPromptCopied = false;
     this.search = "";
     this.priceHistorySearch = "";
     this.isComposingPriceHistorySearch = false;
@@ -27,26 +31,39 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   cacheElements() {
-    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportCandidates", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistorySuggestions", "priceHistorySort", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
+    const ids = ["monthlySpend", "monthlySpendLabel", "analysisPeriodLabel", "receiptFlowProgress", "receiptPasteNextLabel", "copyChatGptPromptButton", "chatGptReceiptJson", "pasteClipboardButton", "chatGptJsonFileInput", "jsonFileName", "importChatGptJsonButton", "chatGptImportError", "chatGptImportPreview", "chatGptImportPreviewSummary", "chatGptImportPreviewHelp", "chatGptImportCandidates", "saveAllImportedReceiptsButton", "confirmChatGptImportButton", "cancelChatGptPreviewButton", "manualReceiptButton", "receiptEditor", "receiptEditorTitle", "receiptReviewBadge", "receiptForm", "receiptId", "receiptStore", "receiptDate", "receiptSubtotal", "receiptDiscount", "receiptIncludedTax", "receiptTax", "receiptTotal", "addReceiptItemButton", "receiptItemsEditor", "receiptDifferenceWarning", "receiptNotes", "receiptRawText", "cancelReceiptButton", "saveReceiptButton", "receiptRecordCount", "dailySpend", "storeSpend", "categorySpend", "priceHistorySearch", "priceHistorySuggestions", "priceHistorySort", "priceHistory", "receiptSearch", "receiptMonthFilter", "receiptList"];
     ids.forEach((id) => { this.elements[id] = document.querySelector(`#${id}`); });
   }
 
   bindEvents() {
     this.elements.copyChatGptPromptButton.addEventListener("click", () => this.copyChatGptPrompt());
+    this.elements.chatGptReceiptJson.addEventListener("input", () => this.updateReceiptFlowFromInput());
     this.elements.pasteClipboardButton.addEventListener("click", () => this.pasteFromClipboard());
     this.elements.chatGptJsonFileInput.addEventListener("change", (event) => this.loadJsonFile(event));
     this.elements.importChatGptJsonButton.addEventListener("click", () => this.importChatGptJson());
     this.elements.chatGptImportCandidates.addEventListener("change", () => { this.elements.confirmChatGptImportButton.disabled = !this.getSelectedImportCandidate(); });
+    this.elements.chatGptImportCandidates.addEventListener("click", (event) => this.handleImportCandidateAction(event));
+    this.elements.saveAllImportedReceiptsButton.addEventListener("click", () => this.saveAllImportedReceipts());
     this.elements.confirmChatGptImportButton.addEventListener("click", () => this.confirmImportCandidate());
-    this.elements.cancelChatGptPreviewButton.addEventListener("click", () => this.clearImportPreview());
-    this.elements.manualReceiptButton.addEventListener("click", () => this.openEditor(this.emptyReceipt()));
+    this.elements.cancelChatGptPreviewButton.addEventListener("click", () => {
+      this.clearImportPreview();
+      this.setReceiptFlowStage(2);
+    });
+    this.elements.manualReceiptButton.addEventListener("click", () => {
+      this.setReceiptFlowStage(3);
+      this.openEditor(this.emptyReceipt());
+    });
     this.elements.addReceiptItemButton.addEventListener("click", () => this.addItem());
     this.elements.receiptItemsEditor.addEventListener("input", (event) => this.updateItem(event));
     this.elements.receiptItemsEditor.addEventListener("change", (event) => this.updateItem(event));
     this.elements.receiptItemsEditor.addEventListener("click", (event) => this.removeItem(event));
     [this.elements.receiptSubtotal, this.elements.receiptDiscount, this.elements.receiptIncludedTax, this.elements.receiptTax, this.elements.receiptTotal].forEach((element) => element.addEventListener("input", () => this.renderDifference()));
     this.elements.receiptForm.addEventListener("submit", (event) => this.saveReceipt(event));
-    this.elements.cancelReceiptButton.addEventListener("click", () => this.closeEditor());
+    this.elements.cancelReceiptButton.addEventListener("click", () => {
+      const wasImportEdit = this.currentImportIndex !== null;
+      this.closeEditor();
+      if (wasImportEdit && this.pendingImportCandidates.length) this.renderPendingImportPreview();
+    });
     this.elements.receiptSearch.addEventListener("input", (event) => { this.search = event.target.value.trim().toLocaleLowerCase("ja-JP"); this.renderReceiptList(); });
     this.elements.receiptMonthFilter.addEventListener("change", (event) => {
       this.monthFilter = event.target.value;
@@ -81,6 +98,41 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     });
     this.elements.priceHistorySuggestions.addEventListener("click", (event) => this.selectPriceHistorySuggestion(event));
     this.elements.priceHistorySort.addEventListener("change", () => this.renderPriceHistory());
+    this.setReceiptFlowStage(1);
+  }
+
+  setReceiptFlowStage(stage) {
+    this.receiptFlowStage = Math.max(1, Math.min(3, Number(stage) || 1));
+    this.elements.receiptFlowProgress.dataset.currentStep = String(this.receiptFlowStage);
+    this.elements.receiptFlowProgress.querySelectorAll("[data-flow-indicator]").forEach((indicator) => {
+      const step = Number(indicator.dataset.flowIndicator);
+      indicator.classList.toggle("is-current", step === this.receiptFlowStage);
+      indicator.classList.toggle("is-complete", step < this.receiptFlowStage);
+      const marker = indicator.querySelector("b");
+      if (marker) marker.textContent = step < this.receiptFlowStage ? "✓" : `${["", "①", "②", "③"][step]}`;
+    });
+    this.updateReceiptFlowFromInput(false);
+  }
+
+  updateReceiptFlowFromInput(allowStageChange = true) {
+    const hasText = Boolean(this.elements.chatGptReceiptJson.value.trim());
+    if (allowStageChange && hasText && this.receiptFlowStage < 3 && this.receiptFlowStage !== 2) {
+      this.setReceiptFlowStage(2);
+      return;
+    }
+    this.elements.importChatGptJsonButton.disabled = !hasText;
+    this.elements.copyChatGptPromptButton.classList.toggle("is-next", this.receiptFlowStage === 1);
+    this.elements.copyChatGptPromptButton.classList.toggle("primary-button", this.receiptFlowStage === 1);
+    this.elements.copyChatGptPromptButton.classList.toggle("secondary-button", this.receiptFlowStage !== 1);
+    const pasteIsNext = this.receiptFlowStage === 2 && !hasText;
+    this.elements.pasteClipboardButton.classList.toggle("is-next", pasteIsNext);
+    this.elements.pasteClipboardButton.classList.toggle("primary-button", pasteIsNext);
+    this.elements.pasteClipboardButton.classList.toggle("secondary-button", !pasteIsNext);
+    const confirmIsNext = this.receiptFlowStage === 2 && hasText;
+    this.elements.importChatGptJsonButton.classList.toggle("is-next", confirmIsNext);
+    this.elements.importChatGptJsonButton.classList.toggle("primary-button", confirmIsNext);
+    this.elements.importChatGptJsonButton.classList.toggle("secondary-button", !confirmIsNext);
+    this.elements.receiptPasteNextLabel.textContent = hasText ? "次はこれ" : "ChatGPTから戻ったら次はこれ";
   }
 
   emptyReceipt() {
@@ -103,6 +155,8 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       helper.remove();
       if (!copied) throw new Error("コピーできませんでした");
     }
+    this.receiptPromptCopied = true;
+    this.setReceiptFlowStage(2);
     this.showToast("ChatGPT用の解析指示をコピーしました");
   }
 
@@ -112,7 +166,8 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     try {
       const analysis = await this.manager.analyzeChatGptInput(this.elements.chatGptReceiptJson.value);
       this.renderImportPreview(analysis);
-      this.elements.chatGptReceiptJson.value = "";
+      if (!analysis.invalidCandidates?.length) this.elements.chatGptReceiptJson.value = "";
+      this.setReceiptFlowStage(3);
     } catch (error) {
       this.showImportError(error);
     }
@@ -125,6 +180,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       const text = await navigator.clipboard.readText();
       if (!text) throw new Error("クリップボードに貼り付けられる文字がありません。");
       this.elements.chatGptReceiptJson.value = text;
+      this.setReceiptFlowStage(2);
       this.elements.chatGptReceiptJson.focus();
       this.showToast("クリップボードから貼り付けました");
     } catch {
@@ -149,6 +205,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       const bytes = await file.arrayBuffer();
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       this.elements.chatGptReceiptJson.value = text;
+      this.setReceiptFlowStage(2);
       this.elements.jsonFileName.textContent = `選択中: ${file.name}`;
       this.elements.jsonFileName.hidden = false;
       await this.importChatGptJson();
@@ -164,24 +221,41 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
   }
 
   renderImportPreview(analysis) {
-    this.pendingImportCandidates = analysis.candidates;
-    const multiple = analysis.candidates.length > 1;
-    this.elements.chatGptImportPreviewSummary.textContent = `${analysis.candidates.length}件`;
-    this.elements.chatGptImportCandidates.innerHTML = analysis.candidates.map((candidate, index) => {
+    this.pendingImportCandidates = analysis.candidates.map((candidate) => ({ ...candidate, excluded: false, saved: false }));
+    this.pendingInvalidCandidates = analysis.invalidCandidates || [];
+    this.renderPendingImportPreview();
+  }
+
+  renderPendingImportPreview() {
+    const active = this.pendingImportCandidates.filter((candidate) => !candidate.excluded && !candidate.saved);
+    const validCount = this.pendingImportCandidates.length;
+    const invalidCount = this.pendingInvalidCandidates?.length || 0;
+    this.elements.chatGptImportPreviewSummary.textContent = `${validCount}件`;
+    this.elements.chatGptImportPreviewHelp.textContent = invalidCount
+      ? `${validCount}件を読み込みました。読み込めなかった${invalidCount}件は、入力欄の内容を修正して再読み込みできます。`
+      : `${validCount}件のレシートを読み込みました。内容を編集・個別保存・除外できます。`;
+    const validHtml = this.pendingImportCandidates.map((candidate, index) => {
       const receipt = candidate.receipt;
       const date = receipt.purchasedAt ? this.formatDate(receipt.purchasedAt) : "日時不明";
       const total = receipt.total === null ? "合計不明" : `¥${this.formatMoney(receipt.total)}`;
       const itemNames = receipt.items.slice(0, 3).map((item) => this.escapeHtml(item.name || "商品名不明")).join("、");
-      return `<label class="json-candidate-card"><input type="radio" name="receiptJsonCandidate" value="${index}" ${multiple ? "" : "checked"}><span><strong>${this.escapeHtml(receipt.storeName || "店舗名不明")}</strong><small>${date}・${receipt.items.length}商品・${total}</small><small>${itemNames}${receipt.items.length > 3 ? "…" : ""}</small></span></label>`;
+      const status = candidate.saved ? "保存済み" : (candidate.excluded ? "除外中" : (receipt.needsReview ? "要確認" : "保存できます"));
+      return `<article class="json-candidate-card batch-receipt-card${candidate.excluded ? " is-excluded" : ""}${candidate.saved ? " is-saved" : ""}"><label><input type="radio" name="receiptJsonCandidate" value="${index}" ${validCount === 1 && !candidate.saved ? "checked" : ""} ${candidate.saved ? "disabled" : ""}><span><strong>${this.escapeHtml(receipt.storeName || "店舗名不明")}</strong><small>${date}・${receipt.items.length}商品・${total}</small><small>${itemNames}${receipt.items.length > 3 ? "…" : ""}</small></span></label><span class="batch-receipt-status">${status}</span><div class="batch-receipt-actions"><button class="small-button" type="button" data-action="edit-import" data-index="${index}" ${candidate.saved ? "disabled" : ""}>編集</button><button class="small-button" type="button" data-action="save-import" data-index="${index}" ${candidate.saved || candidate.excluded ? "disabled" : ""}>個別保存</button><button class="small-button${candidate.excluded ? "" : " danger"}" type="button" data-action="toggle-import" data-index="${index}" ${candidate.saved ? "disabled" : ""}>${candidate.excluded ? "戻す" : "除外"}</button></div></article>`;
     }).join("");
-    this.elements.confirmChatGptImportButton.disabled = multiple;
+    const invalidHtml = (this.pendingInvalidCandidates || []).map((candidate) => `<article class="json-candidate-card batch-receipt-card is-invalid"><span><strong>${candidate.entryIndex + 1}件目を読み込めませんでした</strong><small>${this.escapeHtml(candidate.message || candidate.code || "形式を確認してください")}</small></span><span class="batch-receipt-status">要修正</span></article>`).join("");
+    this.elements.chatGptImportCandidates.innerHTML = validHtml + invalidHtml;
+    this.elements.confirmChatGptImportButton.disabled = !this.getSelectedImportCandidate();
+    this.elements.saveAllImportedReceiptsButton.disabled = active.length === 0;
+    const isBatch = this.pendingImportCandidates.length > 1;
+    this.elements.saveAllImportedReceiptsButton.textContent = isBatch ? "③ すべて保存" : "③ この内容で保存";
     this.elements.chatGptImportPreview.hidden = false;
     this.elements.chatGptImportPreview.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   getSelectedImportCandidate() {
     const selected = this.elements.chatGptImportCandidates.querySelector("input[name='receiptJsonCandidate']:checked");
-    return selected ? this.pendingImportCandidates[Number(selected.value)] : null;
+    const candidate = selected ? this.pendingImportCandidates[Number(selected.value)] : null;
+    return candidate && !candidate.saved ? candidate : null;
   }
 
   confirmImportCandidate() {
@@ -192,16 +266,71 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       this.showImportError(error);
       return;
     }
-    this.openEditor(candidate.receipt);
+    const index = this.pendingImportCandidates.indexOf(candidate);
+    this.openEditor(candidate.receipt, index);
+    this.showToast("このレシートだけ編集できます");
+  }
+
+  async handleImportCandidateAction(event) {
+    const button = event.target.closest("[data-action][data-index]");
+    if (!button) return;
+    const index = Number(button.dataset.index);
+    const candidate = this.pendingImportCandidates[index];
+    if (!candidate || candidate.saved) return;
+    if (button.dataset.action === "edit-import") this.openEditor(candidate.receipt, index);
+    if (button.dataset.action === "toggle-import") {
+      candidate.excluded = !candidate.excluded;
+      this.renderPendingImportPreview();
+    }
+    if (button.dataset.action === "save-import") await this.savePendingCandidate(index);
+  }
+
+  async savePendingCandidate(index, { refresh = true } = {}) {
+    const candidate = this.pendingImportCandidates[index];
+    if (!candidate || candidate.excluded || candidate.saved) return null;
+    const result = await this.manager.save(candidate.receipt);
+    candidate.receipt = result.receipt;
+    candidate.saved = true;
+    if (refresh) {
+      await this.renderAll();
+      const remaining = this.pendingImportCandidates.some((item) => !item.excluded && !item.saved);
+      if (remaining) this.renderPendingImportPreview();
+      else this.finishImportFlow();
+      this.showToast("レシートを1件保存しました");
+    }
+    return result;
+  }
+
+  async saveAllImportedReceipts() {
+    const indexes = this.pendingImportCandidates.map((candidate, index) => ({ candidate, index })).filter(({ candidate }) => !candidate.excluded && !candidate.saved).map(({ index }) => index);
+    if (!indexes.length) return;
+    this.elements.saveAllImportedReceiptsButton.disabled = true;
+    const duplicates = [];
+    for (const index of indexes) {
+      const result = await this.savePendingCandidate(index, { refresh: false });
+      if (result?.duplicate) duplicates.push(result);
+    }
+    await this.renderAll();
+    if (duplicates.length) alert(`${duplicates.length}件に、同じレシートの可能性があります。保存済みのレシート履歴を確認してください。`);
+    this.finishImportFlow();
+    this.showToast(`${indexes.length}件のレシートを保存しました`);
+  }
+
+  finishImportFlow() {
+    this.closeEditor();
     this.clearImportPreview();
-    this.showToast("読み込み内容を確認して保存してください");
+    this.elements.chatGptReceiptJson.value = "";
+    this.receiptPromptCopied = false;
+    this.setReceiptFlowStage(1);
   }
 
   clearImportPreview() {
     this.pendingImportCandidates = [];
+    this.pendingInvalidCandidates = [];
     this.elements.chatGptImportPreview.hidden = true;
     this.elements.chatGptImportCandidates.innerHTML = "";
     this.elements.confirmChatGptImportButton.disabled = true;
+    this.elements.saveAllImportedReceiptsButton.disabled = true;
   }
 
   clearImportError() {
@@ -230,9 +359,12 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.chatGptImportError.hidden = false;
   }
 
-  openEditor(receipt) {
+  openEditor(receipt, importIndex = null) {
+    this.currentImportIndex = Number.isInteger(importIndex) ? importIndex : null;
+    if (this.currentImportIndex !== null) this.elements.chatGptImportPreview.hidden = true;
     this.elements.receiptId.value = receipt.id || "";
-    this.elements.receiptEditorTitle.textContent = receipt.id ? "レシートを編集" : "レシート内容の確認";
+    this.elements.receiptEditorTitle.textContent = this.currentImportIndex !== null ? `取り込みレシート ${this.currentImportIndex + 1}件目を編集` : (receipt.id ? "レシートを編集" : "レシート内容の確認");
+    this.elements.saveReceiptButton.textContent = this.currentImportIndex !== null ? "変更を反映して戻る" : (receipt.id ? "保存" : "③ この内容で保存");
     this.elements.receiptStore.value = receipt.storeName || "";
     this.elements.receiptDate.value = this.toLocalDateTime(receipt.purchasedAt);
     this.elements.receiptSubtotal.value = this.inputNumber(receipt.subtotal);
@@ -261,6 +393,8 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     this.elements.receiptEditor.hidden = true;
     this.currentItems = [];
     this.currentReceiptMeta = {};
+    this.currentImportIndex = null;
+    this.elements.saveReceiptButton.textContent = "保存";
   }
 
   addItem(render = true) {
@@ -345,7 +479,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     event.preventDefault();
     const existingId = this.elements.receiptId.value;
     const existing = existingId ? await this.manager.db.getReceipt(existingId) : null;
-    const result = await this.manager.save({
+    const editedReceipt = {
       ...existing,
       ...this.currentReceiptMeta,
       id: existingId || undefined,
@@ -359,7 +493,17 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
       total: this.elements.receiptTotal.value,
       notes: this.elements.receiptNotes.value,
       needsReview: this.currentItems.some((item) => item.uncertain),
-    });
+    };
+    if (this.currentImportIndex !== null) {
+      const index = this.currentImportIndex;
+      const candidate = this.pendingImportCandidates[index];
+      if (candidate && !candidate.saved) candidate.receipt = { ...editedReceipt, rawText: candidate.receipt.rawText };
+      this.closeEditor();
+      this.renderPendingImportPreview();
+      this.showToast("編集内容を反映しました");
+      return;
+    }
+    const result = await this.manager.save(editedReceipt);
     if (!existingId) {
       this.monthFilter = this.localMonthKey(result.receipt.purchasedAt);
       this.monthFilterInitialized = true;
@@ -369,6 +513,7 @@ window.ShoppingApp.ReceiptUI = class ReceiptUI {
     await this.renderAll();
     if (result.duplicate) alert(`同じレシートの可能性があります。\n${result.duplicate.storeName} / ${this.formatDate(result.duplicate.purchasedAt)} / ¥${this.formatMoney(result.duplicate.total)}\n両方とも保存されています。不要な方を削除してください。`);
     this.showToast("レシートを保存しました");
+    if (!existingId) this.finishImportFlow();
   }
 
   async handleReceiptAction(event) {

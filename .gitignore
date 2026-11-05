@@ -1,0 +1,10 @@
+# Local browser and QA artifacts
+/.chrome-*
+/.qa-*
+/.mobile-ui-profile/
+/.nav-qa-profile/
+/.design-preview.html
+/.receipt-qa.png
+
+# Removed local OCR assets
+/vendor/
